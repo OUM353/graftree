@@ -1,0 +1,10 @@
+{
+  "name": "minisheet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A tiny spreadsheet cell store.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

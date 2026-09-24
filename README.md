@@ -21,6 +21,8 @@ back up into a single best solution. It trades speed and tokens for accuracy.
 > On a small, clearly specified task a single agent is usually just as accurate.
 > In our [kvstore example](examples/kvstore/) both scored 25/25 on a hidden
 > test suite, and graftree cost 6× the worker calls.
+> [examples/minisheet](examples/minisheet/) is a harder benchmark built to
+> separate the two.
 
 The agent that invokes it (Claude Code by default) is always the **closer**: it
 makes every final decision. Other models, such as DeepSeek via
@@ -128,7 +130,12 @@ Add `--json` to any command for machine-readable output.
 - [`examples/kvstore`](examples/kvstore): a feature request on an existing
   codebase with no plan given, so the planner has to decompose it. A holdout
   suite that the run never sees grades the result, and you can run the same
-  problem through a single agent for comparison.
+  problem through a single agent for comparison. Both scored 25/25, so it
+  is a good first run but too easy to separate them.
+- [`examples/minisheet`](examples/minisheet): the hard benchmark. A small
+  spreadsheet engine with formulas, coercion, 15-digit numbers, cycles, long
+  dependency chains, and row/column edits that rewrite references, graded by a
+  38-test holdout.
 
 ## Configure workers
 
