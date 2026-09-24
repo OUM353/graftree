@@ -95,7 +95,9 @@ export async function addBranchWorktree(root: string, path: string, branch: stri
 
 /** Snapshot everything in a worktree (agents may or may not commit themselves). Returns HEAD. */
 export async function commitAll(wt: string, message: string, exclude: string[] = []): Promise<string> {
-  await git(wt, ["add", "-A", "--", ".", ...exclude.map((p) => `:(exclude,glob)${p}`)]);
+  // .graftree-task.md is the long-prompt handoff file for CLI workers; never part of a result.
+  const ex = [".graftree-task.md", ...exclude];
+  await git(wt, ["add", "-A", "--", ".", ...ex.map((p) => `:(exclude,glob)${p}`)]);
   await git(wt, [...IDENT, "commit", "-q", "--no-verify", "--allow-empty", "-m", message]);
   return git(wt, ["rev-parse", "HEAD"]);
 }

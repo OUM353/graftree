@@ -6,12 +6,13 @@ version: 1
 # reference environment variables instead.
 workers:
   # CommandCode running DeepSeek V4.1 Flash in headless mode.
-  # Install: npm i -g command-code   then: cmd login
+  # Uses the `commandcode` alias: its short name `cmd` clashes with cmd.exe on Windows.
+  # Install: npm i -g command-code   then: commandcode login
   # --yolo is intended: every attempt runs in a throwaway git worktree and the
   # engine checks the resulting diff before accepting anything.
   cc-deepseek-flash:
     type: cli
-    command: [cmd, -p, "{prompt}", -m, "{model}", --output-format, json,
+    command: [commandcode, -p, "{prompt}", -m, "{model}", --output-format, json,
               --max-turns, "80", --yolo, --trust, --no-session,
               --skip-onboarding, --no-auto-update]
     model: deepseek/deepseek-v4.1-flash

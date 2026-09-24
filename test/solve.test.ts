@@ -124,7 +124,13 @@ test("closer-owned solver slots wait for submitted attempts", async () => {
 test("config.ignore keeps agent metadata out of snapshots and the ownership gate", async () => {
   const { store, runId } = await approvedRun(focusedPlan(), {
     solver: ["good"],
-    extra: "ignore: [\".agent-meta/**\"]\nbudgets:\n  attemptsPerLeaf: 1\ncommands:\n  setup: mkdir -p .agent-meta && echo x > .agent-meta/state.json",
+    extra: [
+      'ignore: [".agent-meta/**"]',
+      "budgets:",
+      "  attemptsPerLeaf: 1",
+      "commands:",
+      `  setup: node -e "require('fs').mkdirSync('.agent-meta',{recursive:true});require('fs').writeFileSync('.agent-meta/state.json','x')"`,
+    ].join("\n"),
   });
   const s = await runTree(store, runId);
   assert.equal(s.decisions[0]!.candidates[0]!.status, "passed");

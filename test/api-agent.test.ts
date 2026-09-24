@@ -27,7 +27,7 @@ test("agent loop executes tools in the worktree and stops at finish", async () =
   const { f, bodies } = scripted([
     { name: "write_file", args: { path: "src/a.txt", content: "hello world" } },
     { name: "replace_in_file", args: { path: "src/a.txt", old_text: "world", new_text: "tree" } },
-    { name: "run_command", args: { command: "cat src/a.txt" } },
+    { name: "run_command", args: { command: `node -e "process.stdout.write(require('fs').readFileSync('src/a.txt','utf8'))"` } },
     { name: "finish", args: { summary: "all good" } },
   ]);
   const r = await runApiAgent("api", worker, { prompt: "do it", cwd }, f);

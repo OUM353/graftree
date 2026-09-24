@@ -71,9 +71,9 @@ workers:
     type: cli
     command: ["opencode", "run", "--model", "{model}", "{prompt}"]
     model: anthropic/claude-sonnet-5
-  cc-deepseek-flash:                # CommandCode v1.65 headless flags, verified via `cmd --help`
+  cc-deepseek-flash:                # CommandCode v1.65 headless flags, verified via `commandcode --help`
     type: cli
-    command: [cmd, -p, "{prompt}", -m, "{model}", --output-format, json,
+    command: [commandcode, -p, "{prompt}", -m, "{model}", --output-format, json,
               --max-turns, "80", --yolo, --trust, --no-session,
               --skip-onboarding, --no-auto-update]
     model: deepseek/deepseek-v4.1-flash
@@ -307,7 +307,7 @@ The repo is set up so that each piece can be pulled in on its own:
 | Library | `graftree-agent` exports (schema, store, plan checks, workers) | `import … from "graftree-agent"` |
 | JSON Schemas | `schema/{plan,run,config}.schema.json` (generated from zod) | In the package, or straight from GitHub |
 | Claude Code skill | `plugins/graftree/skills/graftree/` | `/plugin marketplace add oum353/agent-tree` → `/plugin install graftree@graftree` |
-| Skill for other agents | The same folder (standard `SKILL.md`) | Copy it in, `cmd --skill <dir>`, or use the AGENTS.md snippet in `integrations/` |
+| Skill for other agents | The same folder (standard `SKILL.md`) | Copy it in, `commandcode --skill <dir>`, or use the AGENTS.md snippet in `integrations/` |
 
 The engine is written in TypeScript, which means Node ≥ 20. Every supported
 CLI agent already needs Node, and the dependencies are only `zod` and `yaml`.

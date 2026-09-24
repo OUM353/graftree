@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cleanEnv } from "../exec.js";
+import { resolveCommand } from "./resolve-command.js";
 import type { CliWorker } from "../schema.js";
 import type { WorkerResult, WorkerTask } from "./types.js";
 
@@ -43,25 +44,42 @@ export function parseNdjson(stdout: string): { text: string; events: unknown[]; 
   return { text: stdout.trim(), events };
 }
 
+/** File (in the worker's cwd) holding a prompt too long for a command line. Never snapshotted. */
+export const TASK_FILE = ".graftree-task.md";
+
+/** Prompts above this go through TASK_FILE: Windows caps a whole command line at 32,767 chars. */
+export const MAX_ARGV_PROMPT = 8000;
+
 export async function runCliWorker(name: string, w: CliWorker, task: WorkerTask): Promise<WorkerResult> {
   const started = Date.now();
   const tmp = await mkdtemp(join(tmpdir(), "graftree-prompt-"));
   const promptFile = join(tmp, "prompt.md");
   await writeFile(promptFile, task.prompt);
-  const vars: Record<string, string> = { prompt: task.prompt, promptFile, cwd: task.cwd };
+  let argPrompt = task.prompt;
+  const taskFile = join(task.cwd, TASK_FILE);
+  if (task.prompt.length > MAX_ARGV_PROMPT && w.command.some((a) => a.includes("{prompt}"))) {
+    await writeFile(taskFile, task.prompt);
+    argPrompt = `Your full task is in the file ${TASK_FILE} in the current directory. Read it completely and follow it exactly. Do not modify or commit that file.`;
+  }
+  const vars: Record<string, string> = { prompt: argPrompt, promptFile, cwd: task.cwd };
   if (w.model) vars.model = w.model;
 
   try {
-    const [cmd, ...args] = renderArgv(w.command, vars);
+    const [cmd0, ...args0] = renderArgv(w.command, vars);
+    const env = cleanEnv(w.env);
+    const resolved = resolveCommand(cmd0!, env);
+    const cmd = resolved.file;
+    const args = [...resolved.prefixArgs, ...args0];
     const { code, stdout, stderr, timedOut } = await new Promise<{
       code: number | null;
       stdout: string;
       stderr: string;
       timedOut: boolean;
     }>((resolve, reject) => {
-      const child = spawn(cmd!, args, {
+      const child = spawn(cmd, args, {
         cwd: task.cwd,
-        env: cleanEnv(w.env),
+        env,
+        windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
       });
       let out = "";
@@ -109,5 +127,6 @@ export async function runCliWorker(name: string, w: CliWorker, task: WorkerTask)
     };
   } finally {
     await rm(tmp, { recursive: true, force: true });
+    await rm(taskFile, { force: true });
   }
 }

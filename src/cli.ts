@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
@@ -324,7 +325,11 @@ async function main(argv: string[]): Promise<number> {
       const cfg = await loadConfig(store.configPath);
       const w = getWorker(cfg, rest[1]);
       const prompt = rest[2] ?? "Reply with exactly: GRAFTREE OK";
-      const res = await runWorker(rest[1], w, { prompt, cwd: store.root, timeoutSec: 300 }, "complete");
+      // Smoke tests run in a throwaway directory so an agent with permissions bypassed can't touch the repo.
+      const scratch = await mkdtemp(join(tmpdir(), "graftree-worker-test-"));
+      const res = await runWorker(rest[1], w, { prompt, cwd: scratch, timeoutSec: 300 }, "complete").finally(() =>
+        rm(scratch, { recursive: true, force: true }),
+      );
       print(
         out,
         `${res.ok ? "✓" : "✗"} ${res.worker} (exit ${res.exitCode}${res.timedOut ? ", timed out" : ""}, ${res.durationMs} ms)\n${res.text || res.stderr}`,

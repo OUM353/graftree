@@ -4,11 +4,20 @@ on:
   pull_request:
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         node: [20, 22]
+        include:
+          - os: windows-latest
+            node: 22
+          - os: macos-latest
+            node: 22
     steps:
+      - if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -19,4 +28,5 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: schema files are up to date
+        if: runner.os == 'Linux'
         run: npm run schema && git diff --exit-code schema/

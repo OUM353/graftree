@@ -19,7 +19,7 @@ Or copy the skill folder by hand into `~/.claude/skills/graftree/` (personal) or
 ## CommandCode
 
 ```bash
-cmd --skill path/to/agent-tree/plugins/graftree/skills/graftree
+commandcode --skill path/to/agent-tree/plugins/graftree/skills/graftree
 ```
 
 ## OpenCode, Codex, and other agents with skills or AGENTS.md support

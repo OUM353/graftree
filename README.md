@@ -55,11 +55,12 @@ The skill is a plain folder: [`plugins/graftree/skills/graftree/`](plugins/graft
 
 ```bash
 npm i -g graftree-agent               # after the npm release
-npm i -g github:oum353/agent-tree     # straight from GitHub (builds on install)
+npm i -g "github:oum353/agent-tree#claude/stoic-einstein-6rjiws"   # from GitHub today (builds on install)
 npx -y graftree-agent --help          # no install
 ```
 
-This needs Node ≥ 20 and git.
+This needs Node ≥ 20 and git. It works on Linux, macOS and Windows; CI runs on all three.
+Until the code is merged to `main`, the GitHub install must name the branch as shown.
 
 ### The library
 
@@ -103,7 +104,7 @@ Add `--json` to any command for machine-readable output.
 workers:
   cc-deepseek-flash:                 # CommandCode + DeepSeek V4.1 Flash, headless
     type: cli
-    command: [cmd, -p, "{prompt}", -m, "{model}", --output-format, json,
+    command: [commandcode, -p, "{prompt}", -m, "{model}", --output-format, json,
               --max-turns, "80", --yolo, --trust, --no-session,
               --skip-onboarding, --no-auto-update]
     model: deepseek/deepseek-v4.1-flash
@@ -123,7 +124,7 @@ roles:                               # "closer" = the invoking agent does it its
 ```
 
 Smoke-test a worker with `graftree worker test cc-deepseek-flash`. For
-CommandCode, install it with `npm i -g command-code` and run `cmd login` first.
+CommandCode, install it with `npm i -g command-code` and run `commandcode login` first.
 
 ## What gets verified
 
@@ -145,7 +146,7 @@ verdict. The closer decides which one wins.
 |---|---|
 | Engine, gates, repair, integration, close | Automated end-to-end tests using a scripted fake CLI agent |
 | API worker tool loop | Tests against a mocked OpenAI-compatible server |
-| CommandCode worker | Flags taken from `cmd --help` (v1.65). **Its JSON output parsing still needs a live run** |
+| CommandCode worker | Flags taken from `commandcode --help` (v1.65). **Its JSON output parsing still needs a live run** |
 | OpenRouter | The request format is standard, but **no live call has been made yet** |
 
 ## Safety
