@@ -74,7 +74,7 @@ import { Store, checkPlan, newRun, submitPlan, approveRun, runWorker } from "gra
 ```
 
 The JSON Schemas ship with the package: `graftree-agent/schema/plan.schema.json`,
-`run.schema.json` and `config.schema.json`.
+`subtree.schema.json`, `run.schema.json` and `config.schema.json`.
 
 ## Quick start (CLI)
 
@@ -98,11 +98,22 @@ The engine never picks winners on its own unless you set `budgets.autoSelect: tr
 or pass `run --auto-select` (for CI). When a review finds a real bug the tests missed,
 `harden NODE --tests DIR --command "…" --reason "…" --yes` adds new tests (with your OK):
 they are locked, existing attempts re-verify, and every one that now fails is repaired.
+When a leaf is too big to solve whole, `redecompose NODE --file subtree.json --tests DIR --reason "…"`
+splits it into a subtree (new tests added, old tests kept). It pauses for `approve`/`reject` like the first plan.
 Other commands: `retry NODE` (more attempts),
 `attempt NODE --worktree P` (submit your own candidate through the same gates),
 `clean` (remove worktrees).
 
 Add `--json` to any command for machine-readable output.
+
+## Examples
+
+- [`examples/calculator`](examples/calculator): a ready-made two-leaf plan. It is the
+  cheapest way to see the whole loop, including hardening.
+- [`examples/kvstore`](examples/kvstore): a feature request on an existing
+  codebase with no plan given, so the planner has to decompose it. A holdout
+  suite that the run never sees grades the result, and you can run the same
+  problem through a single agent for comparison.
 
 ## Configure workers
 

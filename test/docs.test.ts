@@ -39,3 +39,20 @@ test("examples/calculator hardening only adds new test paths", async () => {
   const locked = new Set(plan.nodes.flatMap((n: { acceptance: { files: string[] } }) => n.acceptance.files));
   for (const f of readdirSync("examples/calculator/hardening/test")) assert.ok(!locked.has(`test/${f}`), f);
 });
+
+test("examples/kvstore: starter tests pass, holdout grades the untouched starter as failing", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = join(mkdtempSync(join(tmpdir(), "gt-kv-")), "repo");
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const node = (...args: string[]) => spawnSync(process.execPath, args, { cwd: dir, env, encoding: "utf8" });
+  assert.equal(spawnSync(process.execPath, ["examples/kvstore/setup.mjs", dir], { encoding: "utf8" }).status, 0);
+  assert.equal(node("--test", join("test", "store.test.mjs")).status, 0);
+  const graded = spawnSync(process.execPath, ["examples/kvstore/grade.mjs", dir], { env, encoding: "utf8" });
+  assert.equal(graded.status, 1);
+  assert.match(graded.stdout, /holdout: 0\/\d+ passed/);
+  rmSync(join(dir, ".."), { recursive: true, force: true });
+});
