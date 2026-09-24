@@ -6,7 +6,7 @@ import { renderTree } from "./plan.js";
 import { removeRunWorktrees } from "./solve.js";
 import { logEvent } from "./store.js";
 import { formatUsage, recordedWarnings, runUsage, sumUsage } from "./usage.js";
-import { GraftreeError, now, writeFileAtomic } from "./util.js";
+import { GraftreeError, logFileName, now, writeFileAtomic } from "./util.js";
 /**
  * Final verification at the root: every node's acceptance command plus the
  * repo-wide test/build/lint commands, on the root winner. On success the
@@ -27,7 +27,7 @@ export async function closeRun(store, runId, opts = {}) {
     const checks = {};
     const check = async (name, cmd) => {
         const r = await runShell(cmd, wt, cfg.commands.timeoutSec);
-        const log = join(store.runDir(run.id), "final", `${name.replace(/[^a-z0-9._-]/gi, "_")}.log`);
+        const log = join(store.runDir(run.id), "final", logFileName(name));
         await writeLog(log, `$ ${cmd}\n${r.output}\n[exit ${r.exitCode}${r.timedOut ? ", timed out" : ""}]\n`);
         checks[name] = { ok: r.exitCode === 0, exitCode: r.exitCode, log: relative(store.runDir(run.id), log), violations: [] };
     };
