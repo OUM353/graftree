@@ -21,7 +21,7 @@ graftree --version || npx -y graftree-agent --version   # use whichever works as
 ```
 
 If neither works, tell the user to install it (`npm i -g graftree-agent`, or
-`npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/claude/stoic-einstein-6rjiws` before the npm release), then stop.
+`npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/main` before the npm release), then stop.
 
 ## Phase 0: Setup (once per repo)
 
