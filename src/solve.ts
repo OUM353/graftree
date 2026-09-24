@@ -22,7 +22,7 @@ import { checkLocked } from "./lifecycle.js";
 import { integratorPrompt, repairPrompt, reviewerPrompt, solverPrompt } from "./prompts.js";
 import { CLOSER, TIER_DEFAULTS, type Attempt, type CheckResult, type Config, type NodeState, type Run, type RunStatus } from "./schema.js";
 import { logEvent, type Store } from "./store.js";
-import { addUsage, runUsage } from "./usage.js";
+import { addUsage, recordedWarnings, runUsage, usageWarnings } from "./usage.js";
 import { GraftreeError, normalizeRepoPath, now, sha256File } from "./util.js";
 import { runWorker } from "./workers/index.js";
 
@@ -47,6 +47,8 @@ interface Ctx {
   sem: Semaphore;
   save: () => Promise<void>;
   say: (msg: string) => void;
+  /** The wall-clock warning fires at most once per `graftree run`. */
+  wallWarned?: boolean;
 }
 
 class Semaphore {
@@ -247,10 +249,34 @@ async function prepareWorktree(c: Ctx, wt: string, branch: string | null, base: 
   }
 }
 
+/** Report newly crossed usage thresholds once each (recorded in history), and wall time once per `run`. */
+function checkUsage(c: Ctx): void {
+  const seen = new Set(c.run.history.filter((h) => h.event === "usage-warning").map((h) => h.detail?.split(" ")[0]));
+  const warnings = usageWarnings(c.run, c.cfg.budgets);
+  const b = c.cfg.budgets;
+  if (b.warnWallPercent > 0 && !c.wallWarned) {
+    const budgetMs = b.maxWallMinutes * 60_000;
+    const used = Date.now() - (c.deadline - budgetMs);
+    if (used >= (budgetMs * b.warnWallPercent) / 100) {
+      c.wallWarned = true;
+      warnings.push({
+        key: `wall:${new Date(c.deadline).toISOString()}`,
+        message: `this run has used ${Math.round(used / 60_000)} of its ${b.maxWallMinutes} min wall-clock budget (budgets.maxWallMinutes)`,
+      });
+    }
+  }
+  for (const w of warnings) {
+    if (seen.has(w.key)) continue;
+    logEvent(c.run, "usage-warning", `${w.key} ${w.message}`);
+    c.say(`⚠ ${w.message}`);
+  }
+}
+
 async function invokeWorker(c: Ctx, node: NodeState, a: Attempt, workerName: string, prompt: string, logFile: string): Promise<void> {
   const w = getWorker(c.cfg, workerName);
   const res = await runWorker(workerName, w, { prompt, cwd: a.worktree! });
   a.usage = addUsage(a.usage, res);
+  checkUsage(c);
   await writeLog(logPath(c, node.id, a.n, logFile), `${res.stdout}\n--- stderr ---\n${res.stderr}\n--- result ---\n${res.text}`);
   if (!res.ok) c.say(`  ${node.id}/a${a.n} ${workerName}: worker exited ${res.exitCode}${res.timedOut ? " (timed out)" : ""}`);
 }
@@ -405,6 +431,7 @@ async function reviewCandidates(c: Ctx, node: NodeState): Promise<void> {
     const siblings = await siblingFindings(c, node, a);
     const res = await runWorker(pick, getWorker(c.cfg, pick), { prompt: reviewerPrompt(c.run, node, tail(diff, 60_000), siblings), cwd: a.worktree });
     a.usage = addUsage(a.usage, res);
+    checkUsage(c);
     await resetWorktree(a.worktree);
     const file = logPath(c, node.id, a.n, "review.md");
     await writeLog(file, `# Review of ${node.id}/a${a.n} by ${pick}\n\n${res.ok ? res.text : `reviewer failed: ${res.stderr}`}\n`);
@@ -570,6 +597,8 @@ export interface RunSummary {
   status: RunStatus;
   usage: ReturnType<typeof runUsage>;
   decisions: Decision[];
+  /** Usage warnings raised so far (high tokens, many calls, a runaway attempt, wall time). */
+  warnings: string[];
   next: string;
 }
 
@@ -601,7 +630,7 @@ export function summarize(run: Run): RunSummary {
           : run.status === "done"
           ? `merge branch ${run.final?.branch}`
           : `graftree run ${run.id}`;
-  return { run: run.id, status: run.status, usage: runUsage(run), decisions, next };
+  return { run: run.id, status: run.status, usage: runUsage(run), decisions, warnings: recordedWarnings(run), next };
 }
 
 /**
@@ -639,6 +668,7 @@ export async function runTree(store: Store, runId: string | undefined, opts: Run
         if (!["planned", "solving", "integrating"].includes(n.status)) return false;
         return n.kind === "leaf" || childrenOf(run, n.id).every((k) => k.status === "done");
       });
+      checkUsage(c);
       if (!ready.length || Date.now() > c.deadline) break;
       c.say(`▶ ${ready.map((n) => n.id).join(", ")}`);
       await Promise.all(ready.map((n) => (n.kind === "leaf" ? solveLeaf(c, n) : integrateSplit(c, n))));

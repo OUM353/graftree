@@ -79,6 +79,18 @@ export const Config = z.object({
       repairAll: z.boolean().default(true),
       maxRedecompositions: z.number().int().nonnegative().default(1),
       maxWallMinutes: z.number().int().positive().default(240),
+      /**
+       * Usage warnings (0 disables one). They never stop a run; they tell the
+       * closer and the human that it is getting expensive, once per threshold.
+       * warnTokens: tokens in + out for the whole run (warns again at 2x, 3x, ...).
+       * warnCalls: worker calls for the whole run (also repeats at multiples).
+       * warnAttemptTokens: tokens for one attempt, including its repairs and reviews.
+       * warnWallPercent: share of maxWallMinutes used by one `graftree run`.
+       */
+      warnTokens: z.number().int().nonnegative().default(10_000_000),
+      warnCalls: z.number().int().nonnegative().default(100),
+      warnAttemptTokens: z.number().int().nonnegative().default(2_000_000),
+      warnWallPercent: z.number().int().min(0).max(100).default(80),
       concurrency: z.number().int().positive().default(3),
       /**
        * false (default): the closer picks every winner via `graftree decide`.

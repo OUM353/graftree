@@ -143,3 +143,26 @@ test("repairAll: false stops at the first passing repair", async () => {
   const node = (await store.loadRun(runId)).nodes.parser!;
   assert.deepEqual(node.attempts.map((a) => `${a.status}:${a.repairs}`).sort(), ["failed:0", "passed:1"]);
 });
+
+test("usage warnings fire once per threshold and reach run output and the report", async () => {
+  // Each fake call reports 1000 in / 50 out; each attempt = solve + review = 2 calls, 2100 tokens.
+  const extra = "budgets:\n  attemptsPerLeaf: 2\n  autoSelect: true\n  warnTokens: 2000\n  warnCalls: 3\n  warnAttemptTokens: 1500\n  warnWallPercent: 0";
+  const { store, runId } = await approvedRun(focusedPlan(), { solver: ["good"], reviewer: ["critic"], extra });
+  const events: string[] = [];
+  const s = await runTree(store, runId, { onEvent: (m) => events.push(m) });
+  assert.equal(s.usage.calls, 4);
+  const w = s.warnings.join("\n");
+  assert.match(w, /high token usage: 4\.2K tokens so far, over 2× budgets\.warnTokens/);
+  assert.match(w, /high token usage: .* over 1× budgets\.warnTokens/);
+  assert.match(w, /many worker calls: \d+ so far, over 1× budgets\.warnCalls/);
+  assert.match(w, /parser\/a1 \(good\) used 2\.1K tokens in 2 call\(s\)/);
+  assert.match(w, /parser\/a2 \(good\) used 2\.1K tokens/);
+  assert.ok(!/wall-clock/.test(w));
+  assert.ok(events.some((e) => e.startsWith("⚠ high token usage")));
+  // Each threshold is reported once, even across repeated runs.
+  assert.equal(new Set(s.warnings).size, s.warnings.length);
+  const again = await runTree(store, runId);
+  assert.deepEqual(again.warnings, s.warnings);
+  const closed = await closeRun(store, runId);
+  assert.match(readFileSync(closed.report, "utf8"), /Usage warnings raised during the run:\n- ⚠ /);
+});

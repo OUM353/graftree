@@ -60,6 +60,11 @@ budgets:
   repairAll: true             # repair every near-miss, even once one passes; false = stop at the first pass (cheaper)
   maxRedecompositions: 1
   maxWallMinutes: 240
+  # Usage warnings (0 = off). They never stop a run; each fires once per threshold.
+  warnTokens: 10000000        # whole run, tokens in + out (again at 2x, 3x, ...)
+  warnCalls: 100              # whole run, worker calls (again at 2x, 3x, ...)
+  warnAttemptTokens: 2000000  # one attempt incl. its repairs and reviews
+  warnWallPercent: 80         # share of maxWallMinutes used by one `graftree run`
   concurrency: 3
   autoSelect: false           # true = engine picks winners itself (headless/CI); default: the closer decides
 

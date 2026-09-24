@@ -394,6 +394,15 @@ turns it into a split:
 
 Only leaves can be re-decomposed. Restructuring a split means replanning the run.
 
+## 8e. Usage warnings (v0.4)
+
+After every worker call the engine compares usage with `budgets.warnTokens`,
+`warnCalls`, `warnAttemptTokens` and `warnWallPercent`. Each crossed threshold
+is logged once in the run history (totals again at each multiple), printed during
+`run`, returned in the summary's `warnings`, and listed in the report. Warnings
+don't stop the engine; the closer is expected to pause and ask the human. Hard
+token or dollar caps are still not enforced; only `maxWallMinutes` stops a run.
+
 ## 9. Decisions made
 
 - Name: **graftree**. Grafting joins branches into one tree, which is the merge

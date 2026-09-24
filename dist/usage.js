@@ -48,4 +48,41 @@ export const formatUsage = (u) => `${u.calls} call${u.calls === 1 ? "" : "s"}, $
 export function runUsage(run) {
     return sumUsage([...Object.values(run.nodes).flatMap((n) => n.attempts.map((a) => a.usage)), run.overheadUsage]);
 }
+const tokens = (u) => u.inputTokens + u.outputTokens;
+/**
+ * Thresholds the run has crossed so far. Totals warn at each multiple of the
+ * threshold (1x, 2x, ...); a single attempt warns once.
+ */
+export function usageWarnings(run, budgets) {
+    const out = [];
+    const total = runUsage(run);
+    const cached = total.cacheReadTokens ? ` (${k(total.cacheReadTokens)} of the input was cached)` : "";
+    if (budgets.warnTokens > 0) {
+        const x = Math.floor(tokens(total) / budgets.warnTokens);
+        if (x >= 1)
+            out.push({ key: `tokens:${x}`, message: `high token usage: ${k(tokens(total))} tokens so far${cached}, over ${x}× budgets.warnTokens (${k(budgets.warnTokens)})` });
+    }
+    if (budgets.warnCalls > 0) {
+        const x = Math.floor(total.calls / budgets.warnCalls);
+        if (x >= 1)
+            out.push({ key: `calls:${x}`, message: `many worker calls: ${total.calls} so far, over ${x}× budgets.warnCalls (${budgets.warnCalls})` });
+    }
+    if (budgets.warnAttemptTokens > 0) {
+        for (const n of Object.values(run.nodes)) {
+            for (const a of n.attempts) {
+                if (a.usage && tokens(a.usage) >= budgets.warnAttemptTokens) {
+                    out.push({
+                        key: `attempt:${n.id}/a${a.n}`,
+                        message: `${n.id}/a${a.n} (${a.worker}) used ${k(tokens(a.usage))} tokens in ${a.usage.calls} call(s), over budgets.warnAttemptTokens (${k(budgets.warnAttemptTokens)}); check its logs for a looping agent`,
+                    });
+                }
+            }
+        }
+    }
+    return out;
+}
+/** Warnings already recorded in the run's history (what `run`, `show` and the report display). */
+export function recordedWarnings(run) {
+    return run.history.filter((h) => h.event === "usage-warning" && h.detail).map((h) => h.detail.replace(/^[^ ]+ /, ""));
+}
 //# sourceMappingURL=usage.js.map

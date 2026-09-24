@@ -33,6 +33,8 @@ export interface RunSummary {
     status: RunStatus;
     usage: ReturnType<typeof runUsage>;
     decisions: Decision[];
+    /** Usage warnings raised so far (high tokens, many calls, a runaway attempt, wall time). */
+    warnings: string[];
     next: string;
 }
 export declare function summarize(run: Run): RunSummary;

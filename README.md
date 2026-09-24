@@ -165,7 +165,11 @@ A finding that proves real can become a hardening test (see above). A repair
 invalidates the old review, so repaired code is reviewed again.
 
 Every worker call is metered: tokens in and out per attempt, totals in `run`/`show`
-output, and a cost section in `report.md`.
+output, and a cost section in `report.md`. Warnings fire when usage gets high:
+total tokens (`budgets.warnTokens`, default 10M, again at 2×, 3×…), total calls
+(`warnCalls`, 100), a single attempt (`warnAttemptTokens`, 2M; usually a looping
+agent) and wall time (`warnWallPercent`, 80% of `maxWallMinutes`). They never stop
+a run on their own; the skill tells the closer to pause and ask you.
 
 ## Verification status
 

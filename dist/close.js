@@ -5,7 +5,7 @@ import { addDetachedWorktree, diffStat, git, removeWorktree } from "./git.js";
 import { renderTree } from "./plan.js";
 import { removeRunWorktrees } from "./solve.js";
 import { logEvent } from "./store.js";
-import { formatUsage, runUsage, sumUsage } from "./usage.js";
+import { formatUsage, recordedWarnings, runUsage, sumUsage } from "./usage.js";
 import { GraftreeError, now, writeFileAtomic } from "./util.js";
 /**
  * Final verification at the root: every node's acceptance command plus the
@@ -115,7 +115,10 @@ async function renderReport(store, run, cfg, checks, commit) {
     const total = runUsage(run);
     md.push("## Cost", "", `Total: ${formatUsage(total)}`);
     if (run.overheadUsage)
-        md.push(`Planning: ${formatUsage(run.overheadUsage)}`);
+        md.push(`Planning and retired attempts: ${formatUsage(run.overheadUsage)}`);
+    const warnings = recordedWarnings(run);
+    if (warnings.length)
+        md.push("", "Usage warnings raised during the run:", ...warnings.map((w) => `- ⚠ ${w}`));
     md.push("");
     md.push("## Workers", "", ...Object.entries(cfg.roles).map(([r, ws]) => `- ${r}: ${ws.join(", ")}`), "");
     if (run.final) {

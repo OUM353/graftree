@@ -190,6 +190,13 @@ Each leaf can be re-decomposed `budgets.maxRedecompositions` times (default 1).
 Cost so far appears in `run`/`show` output (`Cost so far: … calls, … in / … out`).
 Mention it when you summarize for the user.
 
+When `run` reports a usage warning (`⚠ high token usage`, `many worker calls`,
+an attempt over `warnAttemptTokens`, or most of the wall-clock budget used;
+in JSON, the `warnings` list), **stop and tell the user** before running more
+work: say what fired, the cost so far, and what is left. Continue only with
+their OK. An attempt over `warnAttemptTokens` often means an agent looping;
+read its logs before retrying it.
+
 ## Phase 5: Close
 
 ```bash

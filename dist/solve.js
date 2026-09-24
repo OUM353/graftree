@@ -9,7 +9,7 @@ import { checkLocked } from "./lifecycle.js";
 import { integratorPrompt, repairPrompt, reviewerPrompt, solverPrompt } from "./prompts.js";
 import { CLOSER, TIER_DEFAULTS } from "./schema.js";
 import { logEvent } from "./store.js";
-import { addUsage, runUsage } from "./usage.js";
+import { addUsage, recordedWarnings, runUsage, usageWarnings } from "./usage.js";
 import { GraftreeError, normalizeRepoPath, now, sha256File } from "./util.js";
 import { runWorker } from "./workers/index.js";
 class Semaphore {
@@ -216,10 +216,34 @@ async function prepareWorktree(c, wt, branch, base) {
             throw new GraftreeError(`setup command failed in ${wt}:\n${tail(r.output, 2000)}`, "setup");
     }
 }
+/** Report newly crossed usage thresholds once each (recorded in history), and wall time once per `run`. */
+function checkUsage(c) {
+    const seen = new Set(c.run.history.filter((h) => h.event === "usage-warning").map((h) => h.detail?.split(" ")[0]));
+    const warnings = usageWarnings(c.run, c.cfg.budgets);
+    const b = c.cfg.budgets;
+    if (b.warnWallPercent > 0 && !c.wallWarned) {
+        const budgetMs = b.maxWallMinutes * 60_000;
+        const used = Date.now() - (c.deadline - budgetMs);
+        if (used >= (budgetMs * b.warnWallPercent) / 100) {
+            c.wallWarned = true;
+            warnings.push({
+                key: `wall:${new Date(c.deadline).toISOString()}`,
+                message: `this run has used ${Math.round(used / 60_000)} of its ${b.maxWallMinutes} min wall-clock budget (budgets.maxWallMinutes)`,
+            });
+        }
+    }
+    for (const w of warnings) {
+        if (seen.has(w.key))
+            continue;
+        logEvent(c.run, "usage-warning", `${w.key} ${w.message}`);
+        c.say(`⚠ ${w.message}`);
+    }
+}
 async function invokeWorker(c, node, a, workerName, prompt, logFile) {
     const w = getWorker(c.cfg, workerName);
     const res = await runWorker(workerName, w, { prompt, cwd: a.worktree });
     a.usage = addUsage(a.usage, res);
+    checkUsage(c);
     await writeLog(logPath(c, node.id, a.n, logFile), `${res.stdout}\n--- stderr ---\n${res.stderr}\n--- result ---\n${res.text}`);
     if (!res.ok)
         c.say(`  ${node.id}/a${a.n} ${workerName}: worker exited ${res.exitCode}${res.timedOut ? " (timed out)" : ""}`);
@@ -374,6 +398,7 @@ async function reviewCandidates(c, node) {
         const siblings = await siblingFindings(c, node, a);
         const res = await runWorker(pick, getWorker(c.cfg, pick), { prompt: reviewerPrompt(c.run, node, tail(diff, 60_000), siblings), cwd: a.worktree });
         a.usage = addUsage(a.usage, res);
+        checkUsage(c);
         await resetWorktree(a.worktree);
         const file = logPath(c, node.id, a.n, "review.md");
         await writeLog(file, `# Review of ${node.id}/a${a.n} by ${pick}\n\n${res.ok ? res.text : `reviewer failed: ${res.stderr}`}\n`);
@@ -551,7 +576,7 @@ export function summarize(run) {
                 : run.status === "done"
                     ? `merge branch ${run.final?.branch}`
                     : `graftree run ${run.id}`;
-    return { run: run.id, status: run.status, usage: runUsage(run), decisions, next };
+    return { run: run.id, status: run.status, usage: runUsage(run), decisions, warnings: recordedWarnings(run), next };
 }
 /**
  * Drive the tree as far as possible: solve ready leaves, integrate ready
@@ -590,6 +615,7 @@ export async function runTree(store, runId, opts = {}) {
                     return false;
                 return n.kind === "leaf" || childrenOf(run, n.id).every((k) => k.status === "done");
             });
+            checkUsage(c);
             if (!ready.length || Date.now() > c.deadline)
                 break;
             c.say(`▶ ${ready.map((n) => n.id).join(", ")}`);

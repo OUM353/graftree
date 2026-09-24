@@ -93,6 +93,10 @@ export declare const Config: z.ZodObject<{
         repairAll: z.ZodDefault<z.ZodBoolean>;
         maxRedecompositions: z.ZodDefault<z.ZodNumber>;
         maxWallMinutes: z.ZodDefault<z.ZodNumber>;
+        warnTokens: z.ZodDefault<z.ZodNumber>;
+        warnCalls: z.ZodDefault<z.ZodNumber>;
+        warnAttemptTokens: z.ZodDefault<z.ZodNumber>;
+        warnWallPercent: z.ZodDefault<z.ZodNumber>;
         concurrency: z.ZodDefault<z.ZodNumber>;
         autoSelect: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>;

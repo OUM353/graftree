@@ -228,6 +228,10 @@ export function renderPlanMarkdown(run, cfg) {
     md.push(`- Solver runs: ${leaves.length} leaves × ${attempts} attempts = **${leaves.length * attempts}**`);
     md.push(`- Integrations: **${splits.length}**`);
     md.push(`- Reviews: **${splits.length + 1}** (one per merge + final)`);
+    const b = cfg.budgets;
+    const warn = [b.warnTokens && `${b.warnTokens.toLocaleString("en-US")} tokens`, b.warnCalls && `${b.warnCalls} calls`, b.warnAttemptTokens && `${b.warnAttemptTokens.toLocaleString("en-US")} tokens in one attempt`].filter(Boolean);
+    if (warn.length)
+        md.push(`- Usage warnings at: ${warn.join(", ")}`);
     md.push(`- Repair budget: up to ${cfg.budgets.maxRepairRounds} rounds ${cfg.budgets.repairAll ? "per failed attempt" : "per node"}; up to ${cfg.budgets.maxRedecompositions} re-decomposition(s) per leaf`, "");
     if (run.feedback.length) {
         md.push("## Previous feedback", "");

@@ -101,6 +101,7 @@ function humanSummary(sum: RunSummary): string {
     }
   }
   if (sum.usage.calls) lines.push("", `Cost so far: ${formatUsage(sum.usage)}`);
+  for (const w of sum.warnings) lines.push(`⚠ ${w}`);
   lines.push("", `Next: ${sum.next}`);
   return lines.join("\n");
 }
@@ -238,6 +239,7 @@ async function main(argv: string[]): Promise<number> {
       if (run.hardening.length) lines.push(`Hardened: ${run.hardening.map((h) => `${h.node} (+${h.files.length})`).join(", ")}`);
       const u = runUsage(run);
       if (u.calls) lines.push(`Cost: ${formatUsage(u)}`);
+      if (!sum.decisions.length) for (const w of sum.warnings) lines.push(`⚠ ${w}`);
       if (run.final) lines.push(`Final: ${run.final.branch} (${run.final.commit.slice(0, 12)})`);
       print(out, lines.join("\n"), run);
       return 0;
