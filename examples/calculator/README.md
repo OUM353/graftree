@@ -45,3 +45,25 @@ The defaults give 2 leaves × 3 attempts = 6 solver runs, plus up to 2
 reviews per leaf and 1 at the root. Each CommandCode call starts at about 18K
 input tokens. To make the first run cheaper, set `attemptsPerLeaf: 2` under
 `budgets:` in `.graftree\config.yaml` before `graftree run`.
+
+## Try hardening (v0.3)
+
+In the first live run, the reviewer found that `parse("9".repeat(400) + "+1")`
+returns `a: Infinity` instead of rejecting the input. The winning parser has that
+bug too. `hardening/` holds a test for it: the live-run winner fails it, and
+a parser that checks `Number.isSafeInteger` passes it.
+
+Start a fresh run as above. Once `graftree run` stops at the parser decision,
+harden the parser node instead of accepting it:
+
+```bat
+graftree harden parser --tests %USERPROFILE%\graftree-src\examples\calculator\hardening --command "node --test test/parser.overflow.test.mjs" --reason "Huge operands parse to Infinity / lose precision (review finding)" --yes
+graftree run
+```
+
+What happens next:
+1. The engine locks the new test and brings every parser attempt onto the new base.
+2. It re-runs the gates. Attempts that now fail go back to DeepSeek with the test failure.
+3. Once they're fixed, it stops for your decision again.
+
+`show` and the final report record the hardening and its cost.

@@ -32,3 +32,10 @@ test("examples/calculator plan validates against its drafted tests", async () =>
   const plan = JSON.parse(readFileSync("examples/calculator/plan.json", "utf8"));
   assert.deepEqual(checkPlan(plan, { testsDir: "examples/calculator/tests" }).errors, []);
 });
+
+test("examples/calculator hardening only adds new test paths", async () => {
+  const { readdirSync } = await import("node:fs");
+  const plan = JSON.parse(readFileSync("examples/calculator/plan.json", "utf8"));
+  const locked = new Set(plan.nodes.flatMap((n: { acceptance: { files: string[] } }) => n.acceptance.files));
+  for (const f of readdirSync("examples/calculator/hardening/test")) assert.ok(!locked.has(`test/${f}`), f);
+});
