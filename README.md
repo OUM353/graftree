@@ -55,12 +55,13 @@ The skill is a plain folder: [`plugins/graftree/skills/graftree/`](plugins/graft
 
 ```bash
 npm i -g graftree-agent               # after the npm release
-npm i -g "github:oum353/agent-tree#claude/stoic-einstein-6rjiws"   # from GitHub today (builds on install)
+npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/claude/stoic-einstein-6rjiws   # from GitHub today (no git or build needed)
 npx -y graftree-agent --help          # no install
 ```
 
 This needs Node ≥ 20 and git. It works on Linux, macOS and Windows; CI runs on all three.
-Until the code is merged to `main`, the GitHub install must name the branch as shown.
+Until the code is merged to `main` and published to npm, install from the branch tarball as shown.
+(`npm i -g github:…` git installs are unreliable: npm can drop files while extracting them.)
 
 ### The library
 
