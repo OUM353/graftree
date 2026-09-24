@@ -174,6 +174,34 @@ export declare const Plan: z.ZodObject<{
 }, z.core.$strip>;
 export type Plan = z.infer<typeof Plan>;
 export type PlanInput = z.input<typeof Plan>;
+/** Input to `graftree redecompose`: the new nodes under a leaf that could not be solved whole. */
+export declare const Subtree: z.ZodObject<{
+    rationale: z.ZodString;
+    sharedPaths: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    nodes: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        parent: z.ZodNullable<z.ZodString>;
+        kind: z.ZodEnum<{
+            leaf: "leaf";
+            split: "split";
+        }>;
+        goal: z.ZodString;
+        contract: z.ZodPrefault<z.ZodObject<{
+            exposes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+            consumes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        }, z.core.$strip>>;
+        ownedPaths: z.ZodArray<z.ZodString>;
+        sharedPaths: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        acceptance: z.ZodObject<{
+            files: z.ZodDefault<z.ZodArray<z.ZodString>>;
+            command: z.ZodString;
+            rubric: z.ZodOptional<z.ZodString>;
+            extraCommands: z.ZodDefault<z.ZodArray<z.ZodString>>;
+        }, z.core.$strip>;
+        dependsOn: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export type SubtreeInput = z.input<typeof Subtree>;
 export declare const RunStatus: z.ZodEnum<{
     draft: "draft";
     awaiting_approval: "awaiting_approval";
@@ -654,6 +682,63 @@ export declare const Run: z.ZodObject<{
         command: z.ZodString;
         reason: z.ZodString;
         baseCommit: z.ZodString;
+    }, z.core.$strip>>>;
+    redecompositions: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        at: z.ZodString;
+        node: z.ZodString;
+        reason: z.ZodString;
+        nodes: z.ZodArray<z.ZodString>;
+        files: z.ZodArray<z.ZodString>;
+        baseCommit: z.ZodString;
+    }, z.core.$strip>>>;
+    pendingRedecomposition: z.ZodDefault<z.ZodNullable<z.ZodObject<{
+        at: z.ZodString;
+        node: z.ZodString;
+        reason: z.ZodString;
+        plan: z.ZodObject<{
+            tier: z.ZodEnum<{
+                focused: "focused";
+                standard: "standard";
+                deep: "deep";
+            }>;
+            summary: z.ZodString;
+            rationale: z.ZodDefault<z.ZodString>;
+            nodes: z.ZodArray<z.ZodObject<{
+                id: z.ZodString;
+                parent: z.ZodNullable<z.ZodString>;
+                kind: z.ZodEnum<{
+                    leaf: "leaf";
+                    split: "split";
+                }>;
+                goal: z.ZodString;
+                contract: z.ZodPrefault<z.ZodObject<{
+                    exposes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                    consumes: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strip>>;
+                ownedPaths: z.ZodArray<z.ZodString>;
+                sharedPaths: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                acceptance: z.ZodObject<{
+                    files: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                    command: z.ZodString;
+                    rubric: z.ZodOptional<z.ZodString>;
+                    extraCommands: z.ZodDefault<z.ZodArray<z.ZodString>>;
+                }, z.core.$strip>;
+                dependsOn: z.ZodDefault<z.ZodArray<z.ZodString>>;
+            }, z.core.$strip>>;
+        }, z.core.$strip>;
+        files: z.ZodArray<z.ZodString>;
+        stagedTests: z.ZodString;
+        resumeStatus: z.ZodEnum<{
+            draft: "draft";
+            awaiting_approval: "awaiting_approval";
+            needs_replan: "needs_replan";
+            approved: "approved";
+            solving: "solving";
+            awaiting_closer: "awaiting_closer";
+            ready_to_close: "ready_to_close";
+            done: "done";
+            failed: "failed";
+        }>;
     }, z.core.$strip>>>;
     overheadUsage: z.ZodOptional<z.ZodObject<{
         calls: z.ZodDefault<z.ZodNumber>;

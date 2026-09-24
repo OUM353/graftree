@@ -372,6 +372,28 @@ failed, so the closer had one candidate instead of three. `budgets.repairAll`
 `maxRepairRounds × (1 + hardenings of the node)` and repairs them in parallel
 under `budgets.concurrency`. Costs about one extra call per near-miss per round.
 
+## 8d. Re-decomposition (v0.4)
+
+A leaf that escalates may be too big rather than unlucky. `graftree redecompose`
+turns it into a split:
+
+- The node keeps its id, goal, `ownedPaths` and acceptance (including hardening
+  commands), so its locked tests still gate the merged children. The bar can
+  only rise.
+- New children bring new test files. Like hardening these are additive: they
+  are committed on top of the run base and locked.
+- The whole resulting plan is re-validated (ownership inside the parent,
+  disjoint siblings, tests drafted, depth). If the depth no longer fits, the
+  tier is raised to the smallest one that fits.
+- The proposal pauses the run at `awaiting_approval`, the same checkpoint as the
+  first plan. Nothing else can change the tree until the human approves or
+  rejects it. Rejecting restores the previous status.
+- On approval the leaf's attempts are retired (worktrees removed, usage moved
+  to run overhead so cost stays accurate) and ancestors re-integrate.
+- `budgets.maxRedecompositions` caps it per leaf (default 1).
+
+Only leaves can be re-decomposed. Restructuring a split means replanning the run.
+
 ## 9. Decisions made
 
 - Name: **graftree**. Grafting joins branches into one tree, which is the merge

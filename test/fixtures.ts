@@ -19,6 +19,9 @@ const good = {
   // A repair pass also marks the parser "hardened", so hardening tests can require it.
   parser: () => w("src/parser/index.mjs", "export const parse = (s) => { const [a, b] = s.split('+').map(Number); return { op: '+', a, b }; };\n" + (repairing ? "parse.hardened = true;\n" : "")),
   eval: () => w("src/eval/index.mjs", "export const evaluate = (t) => t.a + t.b;\n"),
+  // Children of a re-decomposed parser.
+  lexer: () => w("src/parser/lex/index.mjs", "export const lex = (s) => s.split('+').map(Number);\n"),
+  grammar: () => w("src/parser/index.mjs", "export const parse = (s) => { const [a, b] = s.split('+').map(Number); return { op: '+', a, b }; };\n"),
 };
 const bad = {
   parser: () => w("src/parser/index.mjs", "export const parse = () => ({});\n"),

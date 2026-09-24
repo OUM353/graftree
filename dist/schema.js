@@ -135,6 +135,15 @@ export const Plan = z.object({
     rationale: z.string().default(""),
     nodes: z.array(PlanNode).min(1),
 });
+/** Input to `graftree redecompose`: the new nodes under a leaf that could not be solved whole. */
+export const Subtree = z.object({
+    /** Why the node is split this way; shown at approval. */
+    rationale: z.string().min(1),
+    /** Paths only the integrator of the re-decomposed node may edit (glue). */
+    sharedPaths: z.array(z.string()).optional(),
+    /** New nodes; the direct children name the re-decomposed node as their parent. */
+    nodes: z.array(PlanNode).min(2),
+});
 // ---------------------------------------------------------------------------
 // Run state (tree.json) — the portable protocol between engine and closer
 // ---------------------------------------------------------------------------
@@ -272,7 +281,35 @@ export const Run = z.object({
         baseCommit: z.string(),
     }))
         .default([]),
-    /** Worker calls not tied to an attempt (e.g. planning). */
+    /** Leaves split into subtrees after approval (each one approved by the human). */
+    redecompositions: z
+        .array(z.object({
+        at: z.string(),
+        node: z.string(),
+        reason: z.string(),
+        /** Ids of the nodes added under the re-decomposed node. */
+        nodes: z.array(z.string()),
+        /** New test files (additive, locked on approval). */
+        files: z.array(z.string()),
+        baseCommit: z.string(),
+    }))
+        .default([]),
+    /** A proposed re-decomposition waiting for the human (run status awaiting_approval). */
+    pendingRedecomposition: z
+        .object({
+        at: z.string(),
+        node: z.string(),
+        reason: z.string(),
+        /** The whole plan as it will be after approval. */
+        plan: Plan,
+        files: z.array(z.string()),
+        /** Staged test files, relative to the run dir. */
+        stagedTests: z.string(),
+        resumeStatus: RunStatus,
+    })
+        .nullable()
+        .default(null),
+    /** Worker calls not tied to an attempt (planning, attempts retired by re-decomposition). */
     overheadUsage: Usage.optional(),
     history: z.array(HistoryEntry).default([]),
 });

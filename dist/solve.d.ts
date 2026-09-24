@@ -7,6 +7,9 @@ export interface RunOptions {
     /** Progress messages (human-readable). */
     onEvent?: (msg: string) => void;
 }
+/** While a re-decomposition waits for the human, nothing else may change the tree. */
+export declare function assertNoPending(run: Run): void;
+export declare function withRunLock<T>(store: Store, runId: string, fn: () => Promise<T>): Promise<T>;
 /** Paths an integrator may touch at a split: shared paths, or parent-owned paths no child owns. */
 declare function integrationAllows(run: Run, node: NodeState, file: string): boolean;
 declare function score(a: Attempt): number;
@@ -39,6 +42,8 @@ export declare function summarize(run: Run): RunSummary;
  * Safe to re-run; it resumes from tree.json.
  */
 export declare function runTree(store: Store, runId: string | undefined, opts?: RunOptions): Promise<RunSummary>;
+/** Reopen everything above a node whose winner changed; their merges are stale. */
+export declare function resetAncestors(store: Store, run: Run, id: string): Promise<void>;
 /** The closer's selection. Only a passing attempt can win: the bar is never lowered. */
 export declare function decide(store: Store, runId: string | undefined, nodeId: string, n: number, notes?: string, by?: string): Promise<Run>;
 /** Ask for more engine attempts on a leaf (e.g. after escalation), continuing round-robin over solvers. */
@@ -52,6 +57,7 @@ export declare function addExternalAttempt(store: Store, runId: string | undefin
     commit?: string;
     notes?: string;
 }): Promise<Attempt>;
+export declare function listFiles(dir: string, prefix?: string): Promise<string[]>;
 export interface HardenInput {
     /** Directory mirroring repo-relative paths, holding the NEW test files. */
     testsFrom: string;

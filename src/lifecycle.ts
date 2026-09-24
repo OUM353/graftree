@@ -15,6 +15,12 @@ import { runWorker, type WorkerResult } from "./workers/index.js";
 const PLANNABLE: RunStatus[] = ["draft", "needs_replan", "awaiting_approval"];
 
 function requireStatus(run: Run, allowed: RunStatus[], action: string): void {
+  if (run.pendingRedecomposition) {
+    throw new GraftreeError(
+      `run ${run.id} has a re-decomposition of ${run.pendingRedecomposition.node} pending; use approveRedecomposition/rejectRedecomposition (CLI: graftree approve / reject)`,
+      "bad_status",
+    );
+  }
   if (!allowed.includes(run.status)) {
     throw new GraftreeError(`cannot ${action} run ${run.id} in status "${run.status}" (allowed: ${allowed.join(", ")})`, "bad_status");
   }

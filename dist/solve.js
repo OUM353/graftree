@@ -74,7 +74,13 @@ const engineWorkers = (names) => names.filter((n) => n !== CLOSER);
 // ---------------------------------------------------------------------------
 // Run lock (one engine process per run)
 // ---------------------------------------------------------------------------
-async function withRunLock(store, runId, fn) {
+/** While a re-decomposition waits for the human, nothing else may change the tree. */
+export function assertNoPending(run) {
+    const p = run.pendingRedecomposition;
+    if (p)
+        throw new GraftreeError(`run ${run.id} has a re-decomposition of ${p.node} awaiting approval; \`graftree approve\` or \`graftree reject --notes …\` it first`, "bad_status");
+}
+export async function withRunLock(store, runId, fn) {
     const lock = join(store.runDir(runId), ".lock");
     await mkdir(store.runDir(runId), { recursive: true });
     if (existsSync(lock)) {
@@ -386,8 +392,10 @@ async function settleNode(c, node) {
     if (!passed.length) {
         node.status = "escalated";
         const tried = node.attempts.map((a) => `a${a.n}:${a.worker}:${a.status}`).join(", ") || "none";
-        const kinds = node.kind === "split" ? "fix the integration worktree and submit it with `graftree attempt`" : "`graftree retry` for fresh attempts, submit your own with `graftree attempt`";
-        node.awaiting = `no attempt passed (${tried}); ${kinds}, or reject and replan`;
+        const kinds = node.kind === "split"
+            ? "fix the integration worktree and submit it with `graftree attempt`"
+            : "`graftree retry` for fresh attempts, submit your own with `graftree attempt`, or split it with `graftree redecompose`";
+        node.awaiting = `no attempt passed (${tried}); ${kinds}`;
         return;
     }
     await reviewCandidates(c, node);
@@ -537,10 +545,12 @@ export function summarize(run) {
     const next = run.status === "ready_to_close"
         ? `graftree close ${run.id}`
         : decisions.length
-            ? `inspect with \`graftree diff ${run.id} <node> <attempt>\`, then \`graftree decide ${run.id} <node> <attempt>\` (or retry/attempt), then \`graftree run ${run.id}\``
-            : run.status === "done"
-                ? `merge branch ${run.final?.branch}`
-                : `graftree run ${run.id}`;
+            ? `inspect with \`graftree diff <node> <attempt> --run ${run.id}\`, then \`graftree decide <node> <attempt> --run ${run.id}\` (or retry/attempt/redecompose), then \`graftree run ${run.id}\``
+            : run.pendingRedecomposition
+                ? `review ${run.id}/plan.md, then \`graftree approve ${run.id}\` or \`graftree reject ${run.id} --notes "…"\``
+                : run.status === "done"
+                    ? `merge branch ${run.final?.branch}`
+                    : `graftree run ${run.id}`;
     return { run: run.id, status: run.status, usage: runUsage(run), decisions, next };
 }
 /**
@@ -552,6 +562,7 @@ export async function runTree(store, runId, opts = {}) {
     const run0 = await store.loadRun(runId);
     return withRunLock(store, run0.id, async () => {
         const run = await store.loadRun(run0.id);
+        assertNoPending(run);
         if (!["approved", "solving", "awaiting_closer"].includes(run.status)) {
             if (run.status === "ready_to_close" || run.status === "done")
                 return summarize(run);
@@ -605,7 +616,7 @@ export async function runTree(store, runId, opts = {}) {
     });
 }
 /** Reopen everything above a node whose winner changed; their merges are stale. */
-async function resetAncestors(store, run, id) {
+export async function resetAncestors(store, run, id) {
     for (const anc of ancestorsOf(run, id)) {
         for (const a of anc.attempts)
             if (a.worktree)
@@ -620,6 +631,7 @@ export async function decide(store, runId, nodeId, n, notes, by = "closer") {
     const id = (await store.loadRun(runId)).id;
     return withRunLock(store, id, async () => {
         const run = await store.loadRun(id);
+        assertNoPending(run);
         const node = run.nodes[nodeId];
         if (!node)
             throw new GraftreeError(`unknown node "${nodeId}"`, "invalid");
@@ -647,6 +659,7 @@ export async function retry(store, runId, nodeId, count = 1) {
     const id = (await store.loadRun(runId)).id;
     return withRunLock(store, id, async () => {
         const run = await store.loadRun(id);
+        assertNoPending(run);
         const node = run.nodes[nodeId];
         if (!node)
             throw new GraftreeError(`unknown node "${nodeId}"`, "invalid");
@@ -672,6 +685,7 @@ export async function addExternalAttempt(store, runId, nodeId, src) {
     const id = (await store.loadRun(runId)).id;
     return withRunLock(store, id, async () => {
         const run = await store.loadRun(id);
+        assertNoPending(run);
         const cfg = await loadConfig(store.configPath);
         const c = makeCtx(store, run, cfg, {});
         const node = run.nodes[nodeId];
@@ -722,7 +736,7 @@ export async function addExternalAttempt(store, runId, nodeId, src) {
         return a;
     });
 }
-async function listFiles(dir, prefix = "") {
+export async function listFiles(dir, prefix = "") {
     const out = [];
     for (const e of await readdir(dir, { withFileTypes: true })) {
         const rel = prefix ? `${prefix}/${e.name}` : e.name;
@@ -744,6 +758,7 @@ export async function harden(store, runId, nodeId, input) {
     const id = (await store.loadRun(runId)).id;
     return withRunLock(store, id, async () => {
         const run = await store.loadRun(id);
+        assertNoPending(run);
         if (!run.approval || !["approved", "solving", "awaiting_closer", "ready_to_close"].includes(run.status)) {
             throw new GraftreeError(`run ${id} is "${run.status}"; hardening needs an approved, unfinished run`, "bad_status");
         }

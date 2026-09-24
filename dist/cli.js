@@ -9,9 +9,10 @@ import { CONFIG_TEMPLATE_PATH, PACKAGE_ROOT, getWorker, loadConfig } from "./con
 import { approveRun, checkLocked, newRun, planWithWorker, rejectRun, submitPlan } from "./lifecycle.js";
 import { closeRun } from "./close.js";
 import { renderTree } from "./plan.js";
+import { approveRedecomposition, proposeRedecomposition, rejectRedecomposition } from "./redecompose.js";
 import { addExternalAttempt, attemptDiff, decide, harden, removeRunWorktrees, retry, runTree, summarize } from "./solve.js";
 import { formatUsage, runUsage } from "./usage.js";
-import { Config, Plan, Run, Tier } from "./schema.js";
+import { Config, Plan, Run, Subtree, Tier } from "./schema.js";
 import { Store } from "./store.js";
 import { GraftreeError } from "./util.js";
 import { runWorker } from "./workers/index.js";
@@ -21,10 +22,11 @@ Usage: graftree <command> [options]      (add --json for machine-readable output
 
 Setup
   init                               Create .graftree/config.yaml in this repo
-  schema [plan|run|config]           Print a JSON Schema
+  schema [plan|subtree|run|config]   Print a JSON Schema
 
 Plan phase (nothing is spent on solving before approval)
   new "<problem>" [--tier T]         Start a run (T: auto|focused|standard|deep)
+  new --file PROBLEM.md [--tier T]   Same, with the problem statement read from a file
   plan [run] --file plan.json [--tests DIR]
                                      Submit a closer-authored plan (+ drafted tests)
   plan [run] --worker NAME           Let a CLI agent worker plan + draft tests
@@ -43,6 +45,8 @@ Solve phase (after approval)
                                      Submit a closer-made candidate (same gates)
   harden NODE --tests DIR --command "…" --reason "…" --yes [--run R]
                                      Add tests from a review finding (additive; needs human OK)
+  redecompose NODE --file subtree.json [--tests DIR] --reason "…" [--run R]
+                                     Split a stuck leaf into a subtree; pauses for approve/reject
   close [run] [--keep-worktrees]     Final checks, final branch, report.md
   clean [run]                        Remove the run's worktrees (branches are kept)
 
@@ -140,10 +144,10 @@ async function main(argv) {
     }
     if (cmd === "schema") {
         const which = rest[0] ?? "plan";
-        const schemas = { plan: Plan, run: Run, config: Config };
+        const schemas = { plan: Plan, subtree: Subtree, run: Run, config: Config };
         const s = schemas[which];
         if (!s)
-            throw new GraftreeError(`unknown schema "${which}" (plan|run|config)`, "invalid");
+            throw new GraftreeError(`unknown schema "${which}" (plan|subtree|run|config)`, "invalid");
         process.stdout.write(`${JSON.stringify(z.toJSONSchema(s, { io: "input" }), null, 2)}\n`);
         return 0;
     }
@@ -170,7 +174,9 @@ async function main(argv) {
             return 0;
         }
         case "new": {
-            const problem = rest.join(" ");
+            if (values.file && rest.length)
+                throw new GraftreeError('give the problem as text or with --file, not both', "invalid");
+            const problem = values.file ? await readFile(resolve(values.file), "utf8") : rest.join(" ");
             const tier = values.tier ? z.union([Tier, z.literal("auto")]).parse(values.tier) : "auto";
             const run = await newRun(store, problem, tier);
             print(out, `Created run ${run.id} (tier: ${tier})\nDraft acceptance tests under: ${store.testsDir(run.id)}/<repo-relative path>\nThen submit:  graftree plan ${run.id} --file plan.json   (or --worker NAME)`, { ok: true, run: run.id, status: run.status, testsDir: store.testsDir(run.id), runDir: store.runDir(run.id) });
@@ -209,6 +215,10 @@ async function main(argv) {
             const sum = summarize(run);
             if (sum.decisions.length)
                 lines.push("", humanSummary(sum));
+            if (run.pendingRedecomposition)
+                lines.push(`Pending: re-decomposition of ${run.pendingRedecomposition.node} (approve or reject)`);
+            if (run.redecompositions.length)
+                lines.push(`Re-decomposed: ${run.redecompositions.map((r) => `${r.node} → ${r.nodes.join(", ")}`).join("; ")}`);
             if (run.hardening.length)
                 lines.push(`Hardened: ${run.hardening.map((h) => `${h.node} (+${h.files.length})`).join(", ")}`);
             const u = runUsage(run);
@@ -280,6 +290,25 @@ async function main(argv) {
             print(out, `${node}: hardened with ${h.files.join(", ")}. Next: graftree run ${run.id}`, { ok: true, run: run.id, hardening: h });
             return 0;
         }
+        case "redecompose": {
+            const [node] = rest;
+            if (!node || !values.file || !values.reason) {
+                throw new GraftreeError('usage: graftree redecompose NODE --file subtree.json [--tests DIR] --reason "…" [--run R]', "invalid");
+            }
+            const subtree = JSON.parse(await readFile(resolve(values.file), "utf8"));
+            const res = await proposeRedecomposition(store, values.run, node, {
+                subtree,
+                testsFrom: values.tests ? resolve(values.tests) : undefined,
+                reason: values.reason,
+            });
+            const warn = res.warnings.length ? `\n${res.warnings.map((w) => `  ! ${w}`).join("\n")}` : "";
+            if (!res.plan) {
+                print(out, `Re-decomposition rejected by validation:\n${res.errors.map((e) => `  ✗ ${e}`).join("\n")}${warn}`, { ok: false, errors: res.errors, warnings: res.warnings });
+                return 1;
+            }
+            print(out, `Proposed: ${node} becomes a split — awaiting approval${warn}\n\n${renderTree(res.plan)}\n\nReview: ${store.planMdPath(res.run.id)}\nThen:  graftree approve ${res.run.id}   or   graftree reject ${res.run.id} --notes "…"`, { ok: true, run: res.run.id, status: res.run.status, pending: res.run.pendingRedecomposition, warnings: res.warnings });
+            return 0;
+        }
         case "close": {
             const res = await closeRun(store, rest[0], { keepWorktrees: values["keep-worktrees"] });
             const lines = Object.entries(res.checks).map(([k, v]) => `  ${v.ok ? "✓" : "✗"} ${k}`);
@@ -301,7 +330,19 @@ async function main(argv) {
             return 0;
         }
         case "approve": {
-            const run = await approveRun(store, await store.loadRun(rest[0]), values.notes);
+            const pending = await store.loadRun(rest[0]);
+            if (pending.pendingRedecomposition) {
+                const run = await approveRedecomposition(store, pending.id, values.notes);
+                const r = run.redecompositions.at(-1);
+                print(out, `Approved: ${r.node} split into ${r.nodes.join(", ")}; ${r.files.length} new test file(s) locked. Next: graftree run ${run.id}`, {
+                    ok: true,
+                    run: run.id,
+                    status: run.status,
+                    redecomposition: r,
+                });
+                return 0;
+            }
+            const run = await approveRun(store, pending, values.notes);
             const a = run.approval;
             print(out, `Approved ${run.id}. Locked ${a.locked.length} test file(s). Base: ${a.baseRef} (${a.baseCommit.slice(0, 12)})`, {
                 ok: true,
@@ -312,6 +353,12 @@ async function main(argv) {
             return 0;
         }
         case "reject": {
+            const pending = await store.loadRun(rest[0]);
+            if (pending.pendingRedecomposition) {
+                const run = await rejectRedecomposition(store, pending.id, values.notes ?? "");
+                print(out, `Dropped the proposed re-decomposition; ${run.id} is back to ${run.status}.`, { ok: true, run: run.id, status: run.status });
+                return 0;
+            }
             const run = await rejectRun(store, await store.loadRun(rest[0]), values.notes ?? "");
             print(out, `Rejected ${run.id}; status needs_replan. Feedback will be given to the planner.`, { ok: true, run: run.id, status: run.status });
             return 0;

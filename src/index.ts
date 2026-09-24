@@ -10,6 +10,7 @@ export { runApiAgent, executeTool, AGENT_TOOLS } from "./workers/api-agent.js";
 export { matchesPath, globToRegExp } from "./glob.js";
 export { parseNdjson, renderArgv } from "./workers/cli.js";
 export { runTree, decide, retry, harden, type HardenInput, addExternalAttempt, attemptDiff, summarize, removeRunWorktrees, type RunOptions, type RunSummary, type Decision } from "./solve.js";
+export { proposeRedecomposition, approveRedecomposition, rejectRedecomposition, type RedecomposeInput } from "./redecompose.js";
 export { closeRun, type CloseResult } from "./close.js";
 export { solverPrompt, repairPrompt, integratorPrompt, reviewerPrompt } from "./prompts.js";
 export { normalizeUsage, addUsage, sumUsage, runUsage, formatUsage } from "./usage.js";

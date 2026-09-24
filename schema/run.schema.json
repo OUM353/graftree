@@ -845,6 +845,241 @@
         ]
       }
     },
+    "redecompositions": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "baseCommit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "node",
+          "reason",
+          "nodes",
+          "files",
+          "baseCommit"
+        ]
+      }
+    },
+    "pendingRedecomposition": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "plan": {
+              "type": "object",
+              "properties": {
+                "tier": {
+                  "type": "string",
+                  "enum": [
+                    "focused",
+                    "standard",
+                    "deep"
+                  ]
+                },
+                "summary": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "rationale": {
+                  "default": "",
+                  "type": "string"
+                },
+                "nodes": {
+                  "minItems": 1,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                      },
+                      "parent": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "leaf",
+                          "split"
+                        ]
+                      },
+                      "goal": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "contract": {
+                        "default": {},
+                        "type": "object",
+                        "properties": {
+                          "exposes": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "consumes": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "ownedPaths": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "sharedPaths": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "acceptance": {
+                        "type": "object",
+                        "properties": {
+                          "files": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "command": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "rubric": {
+                            "type": "string"
+                          },
+                          "extraCommands": {
+                            "default": [],
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "command"
+                        ]
+                      },
+                      "dependsOn": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parent",
+                      "kind",
+                      "goal",
+                      "ownedPaths",
+                      "acceptance"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "tier",
+                "summary",
+                "nodes"
+              ]
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "stagedTests": {
+              "type": "string"
+            },
+            "resumeStatus": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "awaiting_approval",
+                "needs_replan",
+                "approved",
+                "solving",
+                "awaiting_closer",
+                "ready_to_close",
+                "done",
+                "failed"
+              ]
+            }
+          },
+          "required": [
+            "at",
+            "node",
+            "reason",
+            "plan",
+            "files",
+            "stagedTests",
+            "resumeStatus"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "overheadUsage": {
       "type": "object",
       "properties": {
