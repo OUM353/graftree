@@ -20,7 +20,7 @@ graftree repo.
 | `nodes[].acceptance.files` | Repo-relative test files, drafted under the run's `tests/` dir |
 | `nodes[].acceptance.command` | Runs from the repo root. Exits 0 only when this node is done |
 | `nodes[].acceptance.rubric` | Only for goals that tests can't express |
-| `nodes[].dependsOn` | Sibling ids whose contracts it consumes. An ordering hint only |
+| `nodes[].dependsOn` | Sibling ids whose real code this node's tests need. The node waits for their winners and starts from their merged code. Leave empty when a contract and a test double suffice, so siblings run in parallel |
 
 ## Example: `standard` tier, rate limiter for an API server
 

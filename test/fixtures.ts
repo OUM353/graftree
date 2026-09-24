@@ -19,6 +19,8 @@ const good = {
   // A repair pass also marks the parser "hardened", so hardening tests can require it.
   parser: () => w("src/parser/index.mjs", "export const parse = (s) => { const [a, b] = s.split('+').map(Number); return { op: '+', a, b }; };\n" + (repairing ? "parse.hardened = true;\n" : "")),
   eval: () => w("src/eval/index.mjs", "export const evaluate = (t) => t.a + t.b;\n"),
+  // Depends on parser and eval: only passes when their real code is present.
+  calc: () => w("src/index.mjs", "import { parse } from './parser/index.mjs'; import { evaluate } from './eval/index.mjs';\nexport const calc = (s) => evaluate(parse(s));\n"),
   // Children of a re-decomposed parser.
   lexer: () => w("src/parser/lex/index.mjs", "export const lex = (s) => s.split('+').map(Number);\n"),
   grammar: () => w("src/parser/index.mjs", "export const parse = (s) => { const [a, b] = s.split('+').map(Number); return { op: '+', a, b }; };\n"),
@@ -66,6 +68,20 @@ export function calcPlan(opts: { glue?: boolean } = {}): PlanInput {
       { id: "root", parent: null, kind: "split", goal: "calculator", ownedPaths: ["src/**"], sharedPaths: opts.glue ? ["src/index.mjs"] : [], acceptance: { files: [e2e], command: `node --test ${e2e}` } },
       { id: "parser", parent: "root", kind: "leaf", goal: "parse", contract: { exposes: ["parse(s): {op,a,b}"] }, ownedPaths: ["src/parser/**"], acceptance: { files: ["test/parser.test.mjs"], command: "node --test test/parser.test.mjs" } },
       { id: "eval", parent: "root", kind: "leaf", goal: "eval", contract: { consumes: ["{op,a,b}"] }, ownedPaths: ["src/eval/**"], acceptance: { files: ["test/eval.test.mjs"], command: "node --test test/eval.test.mjs" } },
+    ],
+  };
+}
+
+/** parser and eval in parallel; calc depends on both and its test uses their real code. */
+export function dependentPlan(): PlanInput {
+  return {
+    tier: "standard",
+    summary: "calculator with a dependent leaf",
+    nodes: [
+      { id: "root", parent: null, kind: "split", goal: "calculator", ownedPaths: ["src/**"], acceptance: { files: ["test/e2e.test.mjs"], command: "node --test test/e2e.test.mjs" } },
+      { id: "parser", parent: "root", kind: "leaf", goal: "parse", ownedPaths: ["src/parser/**"], acceptance: { files: ["test/parser.test.mjs"], command: "node --test test/parser.test.mjs" } },
+      { id: "eval", parent: "root", kind: "leaf", goal: "eval", ownedPaths: ["src/eval/**"], acceptance: { files: ["test/eval.test.mjs"], command: "node --test test/eval.test.mjs" } },
+      { id: "calc", parent: "root", kind: "leaf", goal: "calc() over parse and evaluate", ownedPaths: ["src/index.mjs"], dependsOn: ["parser", "eval"], acceptance: { files: ["test/calc.test.mjs"], command: "node --test test/calc.test.mjs" } },
     ],
   };
 }

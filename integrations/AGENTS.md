@@ -9,7 +9,7 @@ The skill folder is `plugins/graftree/skills/graftree/`.
 ## Claude Code
 
 ```
-/plugin marketplace add oum353/agent-tree
+/plugin marketplace add oum353/graftree
 /plugin install graftree@graftree
 ```
 
@@ -19,7 +19,7 @@ Or copy the skill folder by hand into `~/.claude/skills/graftree/` (personal) or
 ## CommandCode
 
 ```bash
-commandcode --skill path/to/agent-tree/plugins/graftree/skills/graftree
+commandcode --skill path/to/graftree/plugins/graftree/skills/graftree
 ```
 
 ## OpenCode, Codex, and other agents with skills or AGENTS.md support

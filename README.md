@@ -44,7 +44,7 @@ Pick whichever parts you need. Each one works on its own.
 ### The skill (Claude Code)
 
 ```
-/plugin marketplace add oum353/agent-tree
+/plugin marketplace add oum353/graftree
 /plugin install graftree@graftree
 ```
 
@@ -56,7 +56,7 @@ The skill is a plain folder: [`plugins/graftree/skills/graftree/`](plugins/graft
 
 ```bash
 # From GitHub (dist/ is prebuilt, no build step):
-npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/main
+npm i -g https://codeload.github.com/oum353/graftree/tar.gz/refs/heads/main
 
 # After the npm release:
 npm i -g graftree-agent

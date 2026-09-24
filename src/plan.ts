@@ -269,3 +269,15 @@ export function renderPlanMarkdown(run: Run, cfg: Config): string {
   );
   return md.join("\n");
 }
+
+/**
+ * Siblings this node, or any of its ancestors, depends on. Their winning code
+ * is where the node's leaves start, so tests may use the real implementation.
+ */
+export function effectiveDeps(run: Run, node: Pick<NodeState, "parent" | "dependsOn">): NodeState[] {
+  const ids = new Set<string>();
+  for (let cur: Pick<NodeState, "parent" | "dependsOn"> | undefined = node; cur; cur = cur.parent ? run.nodes[cur.parent] : undefined) {
+    for (const d of cur.dependsOn) ids.add(d);
+  }
+  return [...ids].map((id) => run.nodes[id]).filter((n): n is NodeState => !!n);
+}

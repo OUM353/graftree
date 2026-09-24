@@ -18,3 +18,8 @@ export declare function allAcceptanceFiles(plan: Plan): string[];
 export declare function renderTree(plan: Plan, label?: (n: PlanNode) => string): string;
 /** Human-readable plan for the approval checkpoint. */
 export declare function renderPlanMarkdown(run: Run, cfg: Config): string;
+/**
+ * Siblings this node, or any of its ancestors, depends on. Their winning code
+ * is where the node's leaves start, so tests may use the real implementation.
+ */
+export declare function effectiveDeps(run: Run, node: Pick<NodeState, "parent" | "dependsOn">): NodeState[];

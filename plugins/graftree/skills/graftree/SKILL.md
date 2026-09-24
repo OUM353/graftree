@@ -20,8 +20,7 @@ don't guess at state.
 graftree --version || npx -y graftree-agent --version   # use whichever works as $GT
 ```
 
-If neither works, tell the user to install it (`npm i -g graftree-agent`, or
-`npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/main` before the npm release), then stop.
+If neither works, tell the user to install it (`npm i -g graftree-agent`), then stop.
 
 ## Phase 0: Setup (once per repo)
 
@@ -67,9 +66,15 @@ Rules. The engine also enforces most of these:
 4. **Tests first, at every level:** leaf tests for each contract, integration
    tests at each split, end-to-end tests at the root. Use the repo's own test
    framework. Use a `rubric` only for what genuinely can't be tested.
-5. Draft every test file at `<testsDir>/<repo-relative path>`. The run's tests
+5. **Dependencies:** siblings are solved in parallel from the original code, so a
+   node's tests may use only its own code, test doubles, and the code of the
+   siblings in its `dependsOn`. A node with `dependsOn` waits until those siblings
+   have winners, then starts from their verified code. Use it only where a test
+   truly needs a sibling's implementation (e.g. a CLI test that runs the real
+   store and protocol), because it serializes work. Otherwise test against a fake.
+6. Draft every test file at `<testsDir>/<repo-relative path>`. The run's tests
    directory mirrors the repo.
-6. **Prove the tests are meaningful:** in a scratch worktree at HEAD, copy the
+7. **Prove the tests are meaningful:** in a scratch worktree at HEAD, copy the
    tests in and run each `acceptance.command`. The tests should **fail** for the
    right reason (the missing behavior), not because of a syntax error or a wrong
    import path. Fix any test that fails for the wrong reason or already passes.
@@ -168,7 +173,8 @@ split it into a subtree instead of retrying the whole thing:
    Each child needs disjoint `ownedPaths` inside the leaf's, and its own new
    tests at new repo paths, drafted in a scratch dir that mirrors repo paths.
    Siblings solve independently, so a child's tests must not need code from
-   another child; the split's own (already locked) tests check them together.
+   another child unless it lists that child in `dependsOn`; the split's own
+   (already locked) tests check them together.
    Glue files go in `sharedPaths`.
    ```
    {"rationale": "…", "sharedPaths": ["src/parser/index.ts"],
