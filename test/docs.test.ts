@@ -27,3 +27,8 @@ test("SKILL.md has name + description frontmatter", () => {
   assert.equal(fm[1], "graftree");
   assert.ok(fm[2]!.length < 1024);
 });
+
+test("examples/calculator plan validates against its drafted tests", async () => {
+  const plan = JSON.parse(readFileSync("examples/calculator/plan.json", "utf8"));
+  assert.deepEqual(checkPlan(plan, { testsDir: "examples/calculator/tests" }).errors, []);
+});

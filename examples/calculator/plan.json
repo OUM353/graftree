@@ -1,0 +1,51 @@
+{
+  "tier": "standard",
+  "summary": "Build a tiny calculator for binary expressions like '6 * 7': a parser that turns text into an AST, and an evaluator that computes it.",
+  "rationale": "Parsing and evaluation meet only at the AST shape { op, a, b }, so they can be built and tested independently by different solvers and merged at the root.",
+  "nodes": [
+    {
+      "id": "root",
+      "parent": null,
+      "kind": "split",
+      "goal": "evaluate(parse(text)) computes integer binary expressions with + - * /, and errors propagate correctly.",
+      "ownedPaths": ["src/**"],
+      "acceptance": {
+        "files": ["test/e2e.test.mjs"],
+        "command": "node --test test/e2e.test.mjs"
+      }
+    },
+    {
+      "id": "parser",
+      "parent": "root",
+      "kind": "leaf",
+      "goal": "Parse 'a op b' (integers, optional surrounding/inner whitespace, op in + - * /) into an AST; reject anything else.",
+      "contract": {
+        "exposes": [
+          "src/parser/index.mjs: export function parse(text: string): { op: '+' | '-' | '*' | '/', a: number, b: number }  // throws SyntaxError on invalid input"
+        ]
+      },
+      "ownedPaths": ["src/parser/**"],
+      "acceptance": {
+        "files": ["test/parser.test.mjs"],
+        "command": "node --test test/parser.test.mjs"
+      }
+    },
+    {
+      "id": "eval",
+      "parent": "root",
+      "kind": "leaf",
+      "goal": "Evaluate an AST node; division by zero is an error, unknown operators are an error.",
+      "contract": {
+        "consumes": ["{ op: '+' | '-' | '*' | '/', a: number, b: number }"],
+        "exposes": [
+          "src/eval/index.mjs: export function evaluate(ast: { op: string, a: number, b: number }): number  // throws RangeError on division by zero, TypeError on unknown op"
+        ]
+      },
+      "ownedPaths": ["src/eval/**"],
+      "acceptance": {
+        "files": ["test/eval.test.mjs"],
+        "command": "node --test test/eval.test.mjs"
+      }
+    }
+  ]
+}
