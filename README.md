@@ -31,10 +31,11 @@ OpenRouter, or local models, can do the planning, solving and review work.
 
 ## Status
 
-**v0.2: the full loop runs.** Plan → approval → solve → verify → repair → review
-→ integrate → close. It is covered by end-to-end tests that use a scripted fake
-agent. Two parts still need live testing on a real machine: CommandCode's JSON
-output format and OpenRouter tool calling. See [Verification status](#verification-status).
+**v0.4: the full loop runs, live.** Plan → approval → solve → verify → repair →
+review → harden → integrate → close. It is covered by end-to-end tests with a
+scripted fake agent, and has been run end to end on Windows with DeepSeek V4.1
+Flash through CommandCode. OpenRouter tool calling still needs a live test. See
+[Verification status](#verification-status).
 
 ## Install
 
@@ -54,13 +55,11 @@ The skill is a plain folder: [`plugins/graftree/skills/graftree/`](plugins/graft
 ### The CLI
 
 ```bash
-npm i -g graftree-agent               # after the npm release
-# While the repo is private (uses your normal git login; dist/ is prebuilt, no build step):
-git clone -b claude/stoic-einstein-6rjiws https://github.com/OUM353/Agent-tree.git graftree-src
-cd graftree-src && npm pack && npm i -g graftree-agent-0.3.0.tgz
-
-# Once public:
+# From GitHub (dist/ is prebuilt, no build step):
 npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/claude/stoic-einstein-6rjiws
+
+# After the npm release:
+npm i -g graftree-agent
 npx -y graftree-agent --help          # no install
 ```
 
@@ -98,7 +97,7 @@ graftree close                                   # final checks → branch graft
 The engine never picks winners on its own unless you set `budgets.autoSelect: true`
 or pass `run --auto-select` (for CI). When a review finds a real bug the tests missed,
 `harden NODE --tests DIR --command "…" --reason "…" --yes` adds new tests (with your OK):
-they are locked, existing attempts re-verify, and failures go through repair.
+they are locked, existing attempts re-verify, and every one that now fails is repaired.
 Other commands: `retry NODE` (more attempts),
 `attempt NODE --worktree P` (submit your own candidate through the same gates),
 `clean` (remove worktrees).
@@ -163,7 +162,7 @@ output, and a cost section in `report.md`.
 |---|---|
 | Engine, gates, repair, integration, close | Automated end-to-end tests using a scripted fake CLI agent |
 | API worker tool loop | Tests against a mocked OpenAI-compatible server |
-| CommandCode worker | Headless flags from `commandcode --help` (v1.65). Output parsing tested against a real captured run (Windows, DeepSeek V4.1 Flash). A full solve through CommandCode has not been run yet |
+| CommandCode worker | Live: two full runs on Windows with DeepSeek V4.1 Flash (solve, review, hardening + repair, integrate, close). Output parsing is also tested against a captured run |
 | OpenRouter | The request format is standard, but **no live call has been made yet** |
 
 ## Safety

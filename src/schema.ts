@@ -71,6 +71,12 @@ export const Config = z.object({
     .object({
       attemptsPerLeaf: z.number().int().positive().optional(),
       maxRepairRounds: z.number().int().nonnegative().default(2),
+      /**
+       * true (default): every failed attempt gets its own repair budget, even
+       * after another attempt passes, so there are more verified candidates.
+       * false: one budget per node, and repairs stop at the first pass (cheaper).
+       */
+      repairAll: z.boolean().default(true),
       maxRedecompositions: z.number().int().nonnegative().default(1),
       maxWallMinutes: z.number().int().positive().default(240),
       concurrency: z.number().int().positive().default(3),

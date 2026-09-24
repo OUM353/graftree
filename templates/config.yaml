@@ -56,7 +56,8 @@ ignore: []
 
 budgets:
   # attemptsPerLeaf: 3        # default comes from the tier
-  maxRepairRounds: 2
+  maxRepairRounds: 2          # repair rounds per failed attempt (x2 after one hardening, x3 after two, ...)
+  repairAll: true             # repair every near-miss, even once one passes; false = stop at the first pass (cheaper)
   maxRedecompositions: 1
   maxWallMinutes: 240
   concurrency: 3

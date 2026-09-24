@@ -90,6 +90,7 @@ export declare const Config: z.ZodObject<{
     budgets: z.ZodPrefault<z.ZodObject<{
         attemptsPerLeaf: z.ZodOptional<z.ZodNumber>;
         maxRepairRounds: z.ZodDefault<z.ZodNumber>;
+        repairAll: z.ZodDefault<z.ZodBoolean>;
         maxRedecompositions: z.ZodDefault<z.ZodNumber>;
         maxWallMinutes: z.ZodDefault<z.ZodNumber>;
         concurrency: z.ZodDefault<z.ZodNumber>;

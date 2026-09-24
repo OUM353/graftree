@@ -122,3 +122,24 @@ test("a repair invalidates the attempt's earlier review, so the new code is revi
   assert.equal(a.reviewVerdict, "pass");
   assert.equal(a.usage!.calls, 4); // + repair + fresh review
 });
+
+test("repairAll (default): every near-miss is repaired after hardening, not just the first", async () => {
+  const { store, runId } = await approvedRun(focusedPlan(), { solver: ["good"], extra: "budgets:\n  attemptsPerLeaf: 2\n  maxRepairRounds: 1" });
+  await runTree(store, runId);
+  const dir = hardeningTests("test/parser.hardened.test.mjs", HARDENED);
+  await harden(store, runId, "parser", { testsFrom: dir, command: "node --test test/parser.hardened.test.mjs", reason: "r" });
+  const s = await runTree(store, runId);
+  const node = (await store.loadRun(runId)).nodes.parser!;
+  assert.deepEqual(node.attempts.map((a) => `${a.status}:${a.repairs}`), ["passed:1", "passed:1"]);
+  assert.match(s.decisions[0]!.awaiting!, /a1 .*a2 /);
+});
+
+test("repairAll: false stops at the first passing repair", async () => {
+  const { store, runId } = await approvedRun(focusedPlan(), { solver: ["good"], extra: "budgets:\n  attemptsPerLeaf: 2\n  maxRepairRounds: 1\n  repairAll: false" });
+  await runTree(store, runId);
+  const dir = hardeningTests("test/parser.hardened.test.mjs", HARDENED);
+  await harden(store, runId, "parser", { testsFrom: dir, command: "node --test test/parser.hardened.test.mjs", reason: "r" });
+  await runTree(store, runId);
+  const node = (await store.loadRun(runId)).nodes.parser!;
+  assert.deepEqual(node.attempts.map((a) => `${a.status}:${a.repairs}`).sort(), ["failed:0", "passed:1"]);
+});

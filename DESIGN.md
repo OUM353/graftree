@@ -189,7 +189,11 @@ touches a locked file, the candidate is disqualified automatically.
    equal), and reviewer findings.
 3. **Tie-breaks and judgment calls go to the closer.** A worker model never makes
    the final pick.
-4. **No candidate passes:** repair the best near-miss (a bounded number of rounds,
+4. **Near-misses:** every failed (not disqualified) attempt is repaired with its
+   own budget, even when a sibling already passes, so the closer picks among as
+   many verified candidates as possible (`budgets.repairAll`, default on; off =
+   one node budget, stop at the first pass).
+   **No candidate passes:** repair the best near-miss (a bounded number of rounds,
    with the failure output fed back), then retry with fresh attempts, possibly on
    different models. If that also fails, re-decompose the node. If the budget is
    exhausted, escalate to the closer and the human with a diagnosis.
@@ -358,6 +362,15 @@ others), a live tree viewer, cost-aware worker routing, and a benchmark harness
   OpenAI-style APIs into calls, tokens in and out, cached tokens and time. It is
   recorded per attempt (plus planning overhead) and summed in `run`, `show` and
   the report.
+
+## 8c. Repair every near-miss (v0.4)
+
+The live hardening run showed the cost of stopping at the first pass: three
+parser attempts failed the new test, one was repaired, and the other two stayed
+failed, so the closer had one candidate instead of three. `budgets.repairAll`
+(default true) gives each failed attempt its own budget of
+`maxRepairRounds × (1 + hardenings of the node)` and repairs them in parallel
+under `budgets.concurrency`. Costs about one extra call per near-miss per round.
 
 ## 9. Decisions made
 

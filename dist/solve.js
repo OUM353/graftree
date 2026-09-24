@@ -252,50 +252,79 @@ async function runSolveAttempt(c, node, n, workerName) {
     c.say(`  ${node.id}/${label}: ${a.status}${a.score !== undefined ? ` (score ${a.score})` : ""}`);
     await c.save();
 }
-/** Repair loop: feed failure output back to a worker in the same worktree. */
+/** One repair round on one attempt: feed its failure output back to a worker in the same worktree. */
+async function repairAttempt(c, node, a, workerName) {
+    const isSplit = node.kind === "split";
+    const failure = await failureText(c, a);
+    a.repairs++;
+    a.status = "running";
+    await c.save();
+    c.say(`  ${node.id}/a${a.n}: repair ${a.repairs} by ${workerName}`);
+    try {
+        const allowed = isSplit ? [...node.sharedPaths, `${node.ownedPaths.join(", ")} (except paths owned by children)`] : node.ownedPaths;
+        const prompt = isSplit ? integratorPrompt(c.run, node, allowed, failure) : repairPrompt(c.run, node, failure);
+        await invokeWorker(c, node, a, workerName, prompt, `repair${a.repairs}.log`);
+        if (isSplit && a.worker === "merge")
+            a.worker = workerName;
+        await snapshotAndGate(c, node, a, `graftree ${c.run.id} ${node.id} a${a.n} repair ${a.repairs} (${workerName})`);
+        // The code changed, so any earlier review no longer describes it.
+        a.review = undefined;
+        a.reviewVerdict = undefined;
+    }
+    catch (e) {
+        a.status = "error";
+        a.notes = e.message;
+    }
+    c.say(`  ${node.id}/a${a.n}: ${a.status} after repair`);
+    await c.save();
+    // (status is reassigned inside awaited calls; widen so TS doesn't keep the "running" narrowing)
+    return a.status === "passed";
+}
+/** Failed (not disqualified) attempts in engine-managed worktrees: the ones a repair can still fix. */
+function nearMisses(node) {
+    return node.attempts
+        .filter((a) => a.status === "failed" && a.kind !== "external" && a.worktree && existsSync(a.worktree))
+        .sort((x, y) => x.repairs - y.repairs || (x.diffStat?.insertions ?? 0) - (y.diffStat?.insertions ?? 0));
+}
+/**
+ * Repair loop. Each hardening of this node grants a fresh budget: the bar
+ * moved, so fixing is expected.
+ *
+ * budgets.repairAll (default): every near-miss gets its own budget and is
+ * repaired in parallel, even when another attempt already passes, so the
+ * closer chooses among as many verified candidates as possible.
+ * Otherwise: one node-wide budget, spent on the best near-miss until the
+ * first attempt passes.
+ */
 async function repairNode(c, node) {
     const isSplit = node.kind === "split";
     const pool = engineWorkers(isSplit ? c.cfg.roles.integrator : c.cfg.roles.solver);
-    let rounds = node.attempts.reduce((s, a) => s + a.repairs, 0);
-    // Each hardening of this node grants a fresh repair budget: the bar moved, so fixing is expected.
     const hardenings = c.run.hardening.filter((h) => h.node === node.id).length;
     const budget = c.cfg.budgets.maxRepairRounds * (1 + hardenings);
+    const workerFor = (a, round) => isSplit ? pool[round % Math.max(1, pool.length)] : a.worker !== CLOSER && a.worker !== "merge" ? a.worker : pool[0];
+    if (c.cfg.budgets.repairAll) {
+        const jobs = nearMisses(node)
+            .filter((a) => a.repairs < budget)
+            .map((a) => c.sem.use(async () => {
+            while (a.status === "failed" && a.repairs < budget && Date.now() < c.deadline) {
+                const w = workerFor(a, a.repairs);
+                if (!w || (await repairAttempt(c, node, a, w)))
+                    return;
+            }
+        }));
+        await Promise.all(jobs);
+        return node.attempts.some((a) => a.status === "passed");
+    }
+    let rounds = node.attempts.reduce((s, a) => s + a.repairs, 0);
     while (rounds < budget && Date.now() < c.deadline) {
-        // Best near-miss: failed (not disqualified), engine-managed worktree, fewest repairs, smallest diff.
-        const candidates = node.attempts
-            .filter((a) => a.status === "failed" && a.kind !== "external" && a.worktree && existsSync(a.worktree))
-            .sort((x, y) => x.repairs - y.repairs || (x.diffStat?.insertions ?? 0) - (y.diffStat?.insertions ?? 0));
-        const a = candidates[0];
+        const a = nearMisses(node)[0];
         if (!a)
             return false;
-        const workerName = isSplit ? pool[rounds % Math.max(1, pool.length)] : a.worker !== CLOSER && a.worker !== "merge" ? a.worker : pool[0];
-        if (!workerName)
+        const w = workerFor(a, rounds);
+        if (!w)
             return false;
-        const failure = await failureText(c, a);
         rounds++;
-        a.repairs++;
-        a.status = "running";
-        await c.save();
-        c.say(`  ${node.id}/a${a.n}: repair ${a.repairs} by ${workerName}`);
-        try {
-            const allowed = isSplit ? [...node.sharedPaths, `${node.ownedPaths.join(", ")} (except paths owned by children)`] : node.ownedPaths;
-            const prompt = isSplit ? integratorPrompt(c.run, node, allowed, failure) : repairPrompt(c.run, node, failure);
-            await invokeWorker(c, node, a, workerName, prompt, `repair${a.repairs}.log`);
-            if (isSplit && a.worker === "merge")
-                a.worker = workerName;
-            await snapshotAndGate(c, node, a, `graftree ${c.run.id} ${node.id} a${a.n} repair ${a.repairs} (${workerName})`);
-            // The code changed, so any earlier review no longer describes it.
-            a.review = undefined;
-            a.reviewVerdict = undefined;
-        }
-        catch (e) {
-            a.status = "error";
-            a.notes = e.message;
-        }
-        c.say(`  ${node.id}/a${a.n}: ${a.status} after repair`);
-        await c.save();
-        // (status is reassigned inside awaited calls; widen so TS doesn't keep the "running" narrowing)
-        if (a.status === "passed")
+        if (await repairAttempt(c, node, a, w))
             return true;
     }
     return false;
@@ -351,9 +380,9 @@ async function reviewCandidates(c, node) {
 }
 /** After attempts: rank, review, then either auto-select or hand the decision to the closer. */
 async function settleNode(c, node) {
-    let passed = node.attempts.filter((a) => a.status === "passed");
-    if (!passed.length && (await repairNode(c, node)))
-        passed = node.attempts.filter((a) => a.status === "passed");
+    if (c.cfg.budgets.repairAll || !node.attempts.some((a) => a.status === "passed"))
+        await repairNode(c, node);
+    const passed = node.attempts.filter((a) => a.status === "passed");
     if (!passed.length) {
         node.status = "escalated";
         const tried = node.attempts.map((a) => `a${a.n}:${a.worker}:${a.status}`).join(", ") || "none";

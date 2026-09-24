@@ -109,8 +109,9 @@ The engine walks the tree bottom-up:
 - **Leaves:** it runs N attempts per leaf, each in its own worktree, spread
   round-robin across `roles.solver`. Every attempt goes through the gates:
   locked tests untouched, edits only inside `ownedPaths`, `commands.build` if set,
-  and the node's acceptance command. Failing near-misses get repair rounds with
-  their failure output. The top passing candidates are reviewed by
+  and the node's acceptance command. Every failing near-miss gets its own repair
+  rounds with its failure output, even after another attempt passes
+  (`budgets.repairAll: false` stops at the first pass instead). The top passing candidates are reviewed by
   `roles.reviewer` workers.
 - **Splits:** once all its children have winners, it merges them and gates the
   merge against the split's own tests plus every descendant's tests. If glue is
