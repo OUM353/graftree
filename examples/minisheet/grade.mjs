@@ -27,7 +27,7 @@ if (ref && git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).status !
   process.exit(2);
 }
 if (ref) {
-  scratch = mkdtempSync(join(tmpdir(), "kv-grade-"));
+  scratch = mkdtempSync(join(tmpdir(), "minisheet-grade-"));
   dir = join(scratch, "wt");
   execFileSync("git", ["worktree", "add", "--detach", dir, ref], { cwd: repo, stdio: "pipe" });
 }
@@ -36,7 +36,7 @@ try {
   cpSync(holdout, dest, { recursive: true });
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
-  const r = spawnSync(process.execPath, ["--test", "--test-reporter=tap", join("holdout", "kvstore.holdout.test.mjs")], { cwd: dir, env, encoding: "utf8" });
+  const r = spawnSync(process.execPath, ["--test", "--test-reporter=tap", join("holdout", "minisheet.holdout.test.mjs")], { cwd: dir, env, encoding: "utf8" });
   const out = r.stdout ?? "";
   for (const m of out.matchAll(/^not ok \d+ - (.+)$/gm)) console.log(`  ✗ ${m[1]}`);
   const pass = Number(/^# pass (\d+)/m.exec(out)?.[1] ?? 0);
