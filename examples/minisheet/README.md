@@ -65,15 +65,35 @@ rewriting, maybe copy), each worth several attempts.
 
 ## Measured so far
 
-| Setup | Holdout | Calls |
-|---|---|---|
-| Reference solution | 38/38 | – |
-| Untouched starter | 1/38 | – |
-| Single agent: Claude Haiku 4.5 (Claude Code, one prompt) | 12/38 | 1 |
-| Single agent: DeepSeek V4.1 Flash (CommandCode, one prompt) | **38/38** | 1 |
+| Setup | Holdout | Worker calls | Tokens |
+|---|---|---|---|
+| Reference solution | 38/38 | – | – |
+| Untouched starter | 1/38 | – | – |
+| Single agent: Claude Haiku 4.5 (Claude Code, one prompt) | 12/38 | 1 | not measured |
+| Single agent: DeepSeek V4.1 Flash (CommandCode, one prompt) | **38/38** | 1 | not measured |
+| graftree: Opus 5.5 as closer (plans, tests, reviews, integrates), DeepSeek V4.1 Flash solving | **38/38** | 11 | 15.4M in (14.8M cached), 0.5M out, plus the closer's own usage |
 
-DeepSeek through CommandCode solved it alone: it wrote its own 35 tests plus
-about 100 probe checks, and found and fixed three of its own bugs before
-finishing. A precise spec plus an agent that tests its own work is enough here,
-so this benchmark separates weak single agents from strong ones, not strong
-single agents from graftree.
+**What the numbers say.** On the holdout, graftree tied with DeepSeek alone at
+about 11× the worker calls, plus the closer's time and about 51 minutes of
+worker time. DeepSeek through CommandCode tests its own work: it wrote 35 tests
+and about 100 probe checks, and fixed three of its own bugs. A precise spec plus
+an agent like that is enough, so this benchmark separates weak single agents
+from strong ones, not strong single agents from graftree.
+
+**What the numbers miss.** Reading the candidates' code, the closer found three
+spec violations that none of the 38 holdout tests exercise:
+
+- a range such as `A2:B1` written back as-is instead of top-left:bottom-right
+  (section 8);
+- references re-uppercased even when an edit did not move them (section 8);
+- `IF(" true ",1,2)` trimming spaces when converting text to a boolean, so it
+  gave 1 instead of `#VALUE!` (section 4).
+
+It picked the attempts without these slips, and fixed one other bug by hand:
+`ROUND` returned `Infinity` instead of `#NUM!`. The DeepSeek-only result has not
+been checked for such slips. A holdout that covers them would show whether
+the review step buys correctness that plain test counts don't see.
+
+The graftree run also exposed a bug in graftree itself: `close` crashed when the
+root's acceptance command listed many test files (the log file name was too
+long). Fixed in v0.4.3.
