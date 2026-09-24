@@ -70,3 +70,10 @@ rewriting, maybe copy), each worth several attempts.
 | Reference solution | 38/38 | – |
 | Untouched starter | 1/38 | – |
 | Single agent: Claude Haiku 4.5 (Claude Code, one prompt) | 12/38 | 1 |
+| Single agent: DeepSeek V4.1 Flash (CommandCode, one prompt) | **38/38** | 1 |
+
+DeepSeek through CommandCode solved it alone: it wrote its own 35 tests plus
+about 100 probe checks, and found and fixed three of its own bugs before
+finishing. A precise spec plus an agent that tests its own work is enough here,
+so this benchmark separates weak single agents from strong ones, not strong
+single agents from graftree.
