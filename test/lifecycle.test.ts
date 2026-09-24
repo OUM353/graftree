@@ -63,7 +63,7 @@ test("checkLocked disqualifies candidates that edit or delete locked tests", asy
   const approved = await approveRun(store, await store.loadRun(run.id));
   const base = approved.approval!.baseCommit;
 
-  const wt = join(root, "..", `${root.split("/").pop()}-wt`);
+  const wt = `${root}-wt`;
   gitOut(root, "worktree", "add", "-q", "--detach", wt, base);
   write(wt, "src/parser/index.ts", "export const parse = () => 1;\n");
   gitOut(wt, "add", ".");

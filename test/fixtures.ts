@@ -71,7 +71,7 @@ export function focusedPlan(): PlanInput {
 /** Repo + config + approved run, ready for `runTree`. */
 export async function approvedRun(plan: PlanInput, config: { solver: string[]; integrator?: string[]; reviewer?: string[]; extra?: string }) {
   const root = tempRepo();
-  const agent = join(root, "..", `${root.split("/").pop()}-agent.mjs`);
+  const agent = `${root}-agent.mjs`;
   writeFileSync(agent, FAKE_AGENT);
   const behaviors = ["good", "bad", "cheat", "sprawl", "fixer", "review"];
   const workers = behaviors

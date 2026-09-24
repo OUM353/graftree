@@ -109,7 +109,7 @@ test("closer-owned solver slots wait for submitted attempts", async () => {
   assert.equal(s.status, "awaiting_closer");
   assert.match(s.decisions[0]!.awaiting!, /closer attempt slot/);
   const run = await store.loadRun(runId);
-  const wt = join(root, "..", `${root.split("/").pop()}-closer`);
+  const wt = `${root}-closer`;
   gitOut(root, "worktree", "add", "-q", "--detach", wt, run.approval!.baseCommit);
   gitOut(wt, "config", "user.email", "c@x");
   gitOut(wt, "config", "user.name", "c");
