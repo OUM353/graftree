@@ -28,7 +28,7 @@
         "approved",
         "solving",
         "awaiting_closer",
-        "closing",
+        "ready_to_close",
         "done",
         "failed"
       ]
@@ -303,6 +303,26 @@
               "redecomposed"
             ]
           },
+          "base": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "targetAttempts": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "attempts": {
             "default": [],
             "type": "array",
@@ -313,6 +333,14 @@
                   "type": "integer",
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "solve",
+                    "integrate",
+                    "external"
+                  ]
                 },
                 "worker": {
                   "type": "string"
@@ -336,8 +364,200 @@
                 "branch": {
                   "type": "string"
                 },
+                "worktree": {
+                  "type": "string"
+                },
+                "commit": {
+                  "type": "string"
+                },
+                "repairs": {
+                  "default": 0,
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "gates": {
+                  "type": "object",
+                  "properties": {
+                    "locked": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "exitCode": {
+                          "default": null,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "log": {
+                          "type": "string"
+                        },
+                        "violations": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ]
+                    },
+                    "ownership": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "exitCode": {
+                          "default": null,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "log": {
+                          "type": "string"
+                        },
+                        "violations": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ]
+                    },
+                    "build": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "exitCode": {
+                          "default": null,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "log": {
+                          "type": "string"
+                        },
+                        "violations": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ]
+                    },
+                    "acceptance": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "exitCode": {
+                          "default": null,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "log": {
+                          "type": "string"
+                        },
+                        "violations": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ]
+                    },
+                    "lint": {
+                      "type": "object",
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "exitCode": {
+                          "default": null,
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "log": {
+                          "type": "string"
+                        },
+                        "violations": {
+                          "default": [],
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "locked",
+                    "ownership"
+                  ]
+                },
+                "diffStat": {
+                  "type": "object",
+                  "properties": {
+                    "files": {
+                      "type": "number"
+                    },
+                    "insertions": {
+                      "type": "number"
+                    },
+                    "deletions": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "files",
+                    "insertions",
+                    "deletions"
+                  ]
+                },
                 "score": {
                   "type": "number"
+                },
+                "review": {
+                  "type": "string"
+                },
+                "reviewVerdict": {
+                  "type": "string",
+                  "enum": [
+                    "pass",
+                    "concerns",
+                    "fail",
+                    "unknown"
+                  ]
                 },
                 "notes": {
                   "type": "string"
@@ -345,11 +565,26 @@
               },
               "required": [
                 "n",
+                "kind",
                 "worker",
                 "status",
-                "startedAt"
+                "startedAt",
+                "branch"
               ]
             }
+          },
+          "recommended": {
+            "default": null,
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "winner": {
             "default": null,
@@ -370,6 +605,12 @@
               "string",
               "null"
             ]
+          },
+          "decisionNotes": {
+            "type": "string"
+          },
+          "awaiting": {
+            "type": "string"
           }
         },
         "required": [
@@ -448,6 +689,68 @@
             "baseCommit",
             "headCommit",
             "locked"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "final": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "branch": {
+              "type": "string"
+            },
+            "commit": {
+              "type": "string"
+            },
+            "closedAt": {
+              "type": "string"
+            },
+            "checks": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "ok": {
+                    "type": "boolean"
+                  },
+                  "exitCode": {
+                    "default": null,
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "log": {
+                    "type": "string"
+                  },
+                  "violations": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "ok"
+                ]
+              }
+            }
+          },
+          "required": [
+            "branch",
+            "commit",
+            "closedAt",
+            "checks"
           ]
         },
         {

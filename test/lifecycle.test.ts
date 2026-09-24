@@ -136,10 +136,27 @@ test("planWithWorker runs a CLI agent in a throwaway worktree and ingests its pl
   assert.ok(existsSync(join(store.runDir(run.id), "planner.log")));
 });
 
-test("API workers cannot plan (no repo access yet)", async () => {
+test("API workers can plan through the tool loop", async () => {
   const root = tempRepo();
   const store = new Store(root);
   write(root, ".graftree/config.yaml", "version: 1\nworkers:\n  api:\n    type: openai-compatible\n    baseUrl: https://x.test/v1\n    model: m\n");
   const run = await newRun(store, "calc");
-  await assert.rejects(planWithWorker(store, run, "api"), /API worker/);
+  const calls = [
+    { name: "write_file", args: { path: ".graftree-out/plan.json", content: JSON.stringify(samplePlan()) } },
+    ...["e2e", "parser", "eval"].map((f) => ({ name: "write_file", args: { path: `.graftree-out/tests/test/${f}.test.ts`, content: "// api\n" } })),
+    { name: "finish", args: { summary: "PLAN WRITTEN" } },
+  ];
+  let i = 0;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    const c = calls[i++]!;
+    return new Response(JSON.stringify({ choices: [{ message: { content: null, tool_calls: [{ id: `c${i}`, type: "function", function: { name: c.name, arguments: JSON.stringify(c.args) } }] } }] }));
+  }) as typeof fetch;
+  try {
+    const res = await planWithWorker(store, run, "api");
+    assert.deepEqual(res.errors, []);
+    assert.equal(res.worker.text, "PLAN WRITTEN");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

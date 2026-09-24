@@ -70,12 +70,6 @@ export async function planWithWorker(store: Store, run: Run, workerName: string)
   requireStatus(run, PLANNABLE, "plan");
   const cfg = await loadConfig(store.configPath);
   const w = getWorker(cfg, workerName);
-  if (w.type !== "cli") {
-    throw new GraftreeError(
-      `worker "${workerName}" is an API worker; planning needs repo access, so use a CLI agent worker (or plan as the closer and submit with --file)`,
-      "unsupported",
-    );
-  }
   const scratch = await mkdtemp(join(tmpdir(), `graftree-plan-${run.id}-`));
   const wt = join(scratch, "wt");
   await addDetachedWorktree(store.root, wt, "HEAD");

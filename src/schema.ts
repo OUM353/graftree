@@ -40,7 +40,9 @@ export const OpenAICompatibleWorker = z.object({
   apiKeyEnv: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
   maxTokens: z.number().int().positive().optional(),
-  timeoutSec: z.number().int().positive().default(600),
+  /** Tool-call turns allowed when the worker acts as an agent (solve/integrate/plan). */
+  maxTurns: z.number().int().positive().default(60),
+  timeoutSec: z.number().int().positive().default(1800),
 });
 
 export const WorkerConfig = z.discriminatedUnion("type", [CliWorker, OpenAICompatibleWorker]);
@@ -72,13 +74,30 @@ export const Config = z.object({
       maxRedecompositions: z.number().int().nonnegative().default(1),
       maxWallMinutes: z.number().int().positive().default(240),
       concurrency: z.number().int().positive().default(3),
+      /**
+       * false (default): the closer picks every winner via `graftree decide`.
+       * true: the engine accepts its top-ranked passing candidate (headless/CI use).
+       */
+      autoSelect: z.boolean().default(false),
     })
     .prefault({}),
+  /**
+   * Globs never snapshotted from worker worktrees (e.g. an agent CLI's own
+   * metadata dir). Everything else a worker leaves behind counts toward the
+   * ownership gate.
+   */
+  ignore: z.array(z.string()).default([]),
   commands: z
     .object({
+      /** Full test suite; a gate at close. */
       test: z.string().optional(),
+      /** Gate for every candidate. */
       build: z.string().optional(),
+      /** Scored, not gated, for candidates; a gate at close. */
       lint: z.string().optional(),
+      /** Run once in each fresh worktree before a worker starts (e.g. dependency install). */
+      setup: z.string().optional(),
+      timeoutSec: z.number().int().positive().default(900),
     })
     .prefault({}),
 });
@@ -146,7 +165,7 @@ export const RunStatus = z.enum([
   "approved", // tests locked, base commit created; ready to solve
   "solving",
   "awaiting_closer", // engine paused for a closer decision
-  "closing",
+  "ready_to_close", // root has a winner; `graftree close` runs final checks
   "done",
   "failed",
 ]);
@@ -165,22 +184,61 @@ export const NodeStatus = z.enum([
   "redecomposed",
 ]);
 
+export const CheckResult = z.object({
+  ok: z.boolean(),
+  exitCode: z.number().nullable().default(null),
+  /** Path of the captured output, relative to the run dir. */
+  log: z.string().optional(),
+  violations: z.array(z.string()).default([]),
+});
+export type CheckResult = z.infer<typeof CheckResult>;
+
+export const Gates = z.object({
+  locked: CheckResult,
+  ownership: CheckResult,
+  build: CheckResult.optional(),
+  acceptance: CheckResult.optional(),
+  lint: CheckResult.optional(),
+});
+export type Gates = z.infer<typeof Gates>;
+
 export const Attempt = z.object({
   n: z.number().int().positive(),
+  kind: z.enum(["solve", "integrate", "external"]),
+  /** Worker name, or "closer" for attempts the root agent submitted itself. */
   worker: z.string(),
   status: z.enum(["running", "passed", "failed", "disqualified", "error"]),
   startedAt: z.string(),
   finishedAt: z.string().optional(),
-  branch: z.string().optional(),
+  branch: z.string(),
+  worktree: z.string().optional(),
+  commit: z.string().optional(),
+  repairs: z.number().int().nonnegative().default(0),
+  gates: Gates.optional(),
+  diffStat: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
+  /** Engine ranking among passing attempts (higher is better). */
   score: z.number().optional(),
+  /** Review text path (relative to the run dir), when a reviewer ran. */
+  review: z.string().optional(),
+  reviewVerdict: z.enum(["pass", "concerns", "fail", "unknown"]).optional(),
   notes: z.string().optional(),
 });
+export type Attempt = z.infer<typeof Attempt>;
 
 export const NodeState = PlanNode.extend({
   status: NodeStatus,
+  /** Commit attempts start from: the run base for leaves, the merged children for splits. */
+  base: z.string().nullable().default(null),
+  /** Attempts the engine should run for this node (set by tier, raised by `retry`). */
+  targetAttempts: z.number().int().nonnegative().nullable().default(null),
   attempts: z.array(Attempt).default([]),
+  /** Engine's top-ranked passing attempt; the closer confirms or overrides. */
+  recommended: z.number().int().positive().nullable().default(null),
   winner: z.number().int().positive().nullable().default(null),
   decidedBy: z.string().nullable().default(null),
+  decisionNotes: z.string().optional(),
+  /** Why the node is waiting on the closer. */
+  awaiting: z.string().optional(),
 });
 export type NodeState = z.infer<typeof NodeState>;
 
@@ -213,6 +271,15 @@ export const Run = z.object({
       baseCommit: z.string(),
       headCommit: z.string(),
       locked: z.array(LockedFile),
+    })
+    .nullable()
+    .default(null),
+  final: z
+    .object({
+      branch: z.string(),
+      commit: z.string(),
+      closedAt: z.string(),
+      checks: z.record(z.string(), CheckResult),
     })
     .nullable()
     .default(null),

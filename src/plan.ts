@@ -161,7 +161,7 @@ export function checkPlan(input: unknown, opts: { testsDir?: string } = {}): Pla
 export function nodesFromPlan(plan: Plan): Record<string, NodeState> {
   const out: Record<string, NodeState> = {};
   for (const n of plan.nodes) {
-    out[n.id] = { ...n, status: "planned", attempts: [], winner: null, decidedBy: null };
+    out[n.id] = { ...n, status: "planned", base: null, targetAttempts: null, attempts: [], recommended: null, winner: null, decidedBy: null };
   }
   return out;
 }

@@ -7,6 +7,8 @@ import { GraftreeError } from "./util.js";
 
 const pexec = promisify(execFile);
 
+const IDENT = ["-c", "user.name=graftree", "-c", "user.email=graftree@localhost", "-c", "commit.gpgsign=false"];
+
 export async function git(
   cwd: string,
   args: string[],
@@ -61,10 +63,7 @@ export async function commitOverlay(
       await git(root, ["update-index", "--add", "--cacheinfo", `100644,${blob},${f.repoPath}`], env);
     }
     const tree = await git(root, ["write-tree"], env);
-    const commit = await git(
-      root,
-      ["-c", "user.name=graftree", "-c", "user.email=graftree@localhost", "commit-tree", tree, "-p", parent, "-m", message],
-    );
+    const commit = await git(root, [...IDENT, "commit-tree", tree, "-p", parent, "-m", message]);
     await git(root, ["update-ref", ref, commit]);
     return { commit, parent };
   } finally {
@@ -86,4 +85,51 @@ export async function removeWorktree(root: string, path: string): Promise<void> 
 export async function changedFiles(root: string, from: string, to: string): Promise<string[]> {
   const out = await git(root, ["diff", "--name-only", "--no-renames", from, to]);
   return out ? out.split("\n") : [];
+}
+
+/** Create (or recreate) a worktree on `branch` pointing at `commitish`. */
+export async function addBranchWorktree(root: string, path: string, branch: string, commitish: string): Promise<void> {
+  await removeWorktree(root, path);
+  await git(root, ["worktree", "add", "-f", "-B", branch, path, commitish]);
+}
+
+/** Snapshot everything in a worktree (agents may or may not commit themselves). Returns HEAD. */
+export async function commitAll(wt: string, message: string, exclude: string[] = []): Promise<string> {
+  await git(wt, ["add", "-A", "--", ".", ...exclude.map((p) => `:(exclude,glob)${p}`)]);
+  await git(wt, [...IDENT, "commit", "-q", "--no-verify", "--allow-empty", "-m", message]);
+  return git(wt, ["rev-parse", "HEAD"]);
+}
+
+export async function isAncestor(root: string, ancestor: string, descendant: string): Promise<boolean> {
+  return git(root, ["merge-base", "--is-ancestor", ancestor, descendant]).then(
+    () => true,
+    () => false,
+  );
+}
+
+export async function diffStat(root: string, from: string, to: string): Promise<{ files: number; insertions: number; deletions: number }> {
+  const out = await git(root, ["diff", "--shortstat", from, to]);
+  const num = (re: RegExp) => Number(re.exec(out)?.[1] ?? 0);
+  return { files: num(/(\d+) files? changed/), insertions: num(/(\d+) insertions?/), deletions: num(/(\d+) deletions?/) };
+}
+
+export async function diffText(root: string, from: string, to: string): Promise<string> {
+  return git(root, ["diff", from, to]);
+}
+
+/** Merge `commit` into the worktree's HEAD with a merge commit. Returns false (and aborts) on conflict. */
+export async function mergeCommit(wt: string, commit: string, message: string): Promise<boolean> {
+  try {
+    await git(wt, [...IDENT, "merge", "--no-ff", "--no-edit", "-m", message, commit]);
+    return true;
+  } catch {
+    await git(wt, ["merge", "--abort"]).catch(() => undefined);
+    return false;
+  }
+}
+
+/** Discard uncommitted changes in a worktree (e.g. after a read-only reviewer ran there). */
+export async function resetWorktree(wt: string): Promise<void> {
+  await git(wt, ["reset", "-q", "--hard"]);
+  await git(wt, ["clean", "-q", "-fd"]);
 }

@@ -92,8 +92,14 @@
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
               },
+              "maxTurns": {
+                "default": 60,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
               "timeoutSec": {
-                "default": 600,
+                "default": 1800,
                 "type": "integer",
                 "exclusiveMinimum": 0,
                 "maximum": 9007199254740991
@@ -196,7 +202,18 @@
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
+        },
+        "autoSelect": {
+          "default": false,
+          "type": "boolean"
         }
+      }
+    },
+    "ignore": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
       }
     },
     "commands": {
@@ -211,6 +228,15 @@
         },
         "lint": {
           "type": "string"
+        },
+        "setup": {
+          "type": "string"
+        },
+        "timeoutSec": {
+          "default": 900,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         }
       }
     }

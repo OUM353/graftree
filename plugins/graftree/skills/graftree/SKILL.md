@@ -99,64 +99,61 @@ Approval locks the acceptance tests by hash and creates a base commit at
 `refs/graftree/<run>/base` (HEAD plus the tests). The user's branch and working
 tree are not touched.
 
-## Phase 4: Solve (per leaf, bottom-up)
+## Phase 4: Solve (the engine drives, you decide)
 
-> The engine's automated `solve` / `integrate` commands are in development.
-> Until they ship, run this phase yourself, following exactly this protocol.
-> It matches what the engine will automate.
+```bash
+$GT run <run> --json
+```
 
-For each leaf, with independent leaves in parallel:
+The engine walks the tree bottom-up:
+- **Leaves:** it runs N attempts per leaf, each in its own worktree, spread
+  round-robin across `roles.solver`. Every attempt goes through the gates:
+  locked tests untouched, edits only inside `ownedPaths`, `commands.build` if set,
+  and the node's acceptance command. Failing near-misses get repair rounds with
+  their failure output. The top passing candidates are reviewed by
+  `roles.reviewer` workers.
+- **Splits:** once all its children have winners, it merges them and gates the
+  merge against the split's own tests plus every descendant's tests. If glue is
+  needed and `roles.integrator` has workers, they repair the merge.
 
-1. **Attempts:** the tier sets the count (or `budgets.attemptsPerLeaf`). Give each
-   attempt its own worktree:
-   `git worktree add -b graftree/<run>/<node>/a<n> <tmpdir> refs/graftree/<run>/base`.
-2. **Dispatch** each attempt to a worker from `roles.solver`, round-robin across
-   the list. Mixing models is deliberate: they make different mistakes.
-   - For a CLI worker, run its configured command template inside the worktree,
-     with a prompt that includes the node's goal, contract, owned paths, the
-     acceptance command, and "do not modify the acceptance tests".
-   - For the `closer` role, use your own subagents, one per worktree.
-3. **Commit** the attempt's result on its branch.
-4. **Gate** every attempt:
-   - `$GT lock-check <run> --commit <branch> --json` must be ok. If it isn't, the
-     attempt is disqualified.
-   - All changed files must be inside the node's `ownedPaths`.
-   - The node's `acceptance.command` passes in that worktree.
-   - Repo-wide `commands.test` / `build` / `lint` from the config don't regress.
-5. **Select (your decision):** among attempts that pass the gates, prefer fewer
-   regressions and warnings, then a smaller and clearer diff, then reviewer
-   findings. Read the diffs of the top candidates yourself before choosing.
-6. **No attempt passes:** give the best near-miss its failure output and repair it,
-   up to `maxRepairRounds` times. If that fails, run fresh attempts, preferably on
-   different workers. If that also fails, re-decompose this leaf, which requires
-   **re-approval** from the user if the tree shape changes. Once the budget is
-   exhausted, stop and report a diagnosis. Never quietly lower the bar.
+`run` returns when only you can move things forward. The JSON has
+`status: "awaiting_closer"` and a `decisions` list. Each entry has an
+`awaiting` reason and candidates with status, score, diff size and review
+verdict. Handle every decision:
 
-## Phase 5: Integrate upward
+| Situation | What you do |
+|---|---|
+| Passing candidates to choose from | Read the diffs of the top ones yourself (`$GT diff <node> <n> --run <run>`) and any review files, then `$GT decide <node> <n> --run <run> --notes "why"`. Prefer correct and clear over clever. The recommendation is only a hint |
+| `escalated`: nothing passed | Read the logs under `.graftree/runs/<run>/nodes/<node>/`. Then either run `$GT retry <node> --count N`, or solve it yourself (below). If the tests or the decomposition are wrong, stop, tell the user, and get approval before replanning |
+| A closer slot (`roles.solver` includes `closer`) | Solve it with your own subagents in a worktree from the node base, then run `$GT attempt <node> --worktree <path> --run <run>` |
+| An integration needs glue (integrator is `closer`) | Edit the worktree named in `awaiting`, touching only the split's `sharedPaths` or parent paths no child owns. Then run `$GT attempt <node> --worktree <that path>` and `$GT decide` |
 
-At each split node, once all its children have winners:
+After deciding, run `$GT run <run> --json` again. Repeat until the status is
+`ready_to_close`. Changing a winner after its parent was integrated reopens the
+parent automatically.
 
-1. Merge the winning child branches into a fresh worktree from the base ref.
-   Resolve seam issues, touching only `sharedPaths` and glue code.
-2. Run the split node's acceptance command and the children's commands. If a
-   failure traces to one child, reopen only that child's subtree.
-3. Get an adversarial review, ideally from a worker of a different model family
-   than the solvers. Its prompt: "find inputs or cases where this is wrong".
-   Verify each finding yourself before acting on it.
+Rules that don't bend: `decide` accepts only attempts that passed every gate,
+and an attempt you submit goes through exactly the same gates as a worker's.
 
-## Phase 6: Close
+## Phase 5: Close
 
-At the root, run all acceptance commands, the full test suite, and a final
-review. Read the final diff in full. Only then decide to ship or revise.
+```bash
+$GT close <run> --json
+```
 
-Deliver:
-- One branch, `graftree/<run>/final`, based on the user's HEAD with the solution
-  plus the acceptance tests.
-- A report covering what was built, the tree, which attempt and worker won each
-  node and why, what was rejected and why, test results, and any residual risks.
+This runs every node's acceptance command plus `commands.test`, `build` and `lint`
+on the root winner. On success it creates branch `graftree/<run>/final`, which is
+based on the user's HEAD and contains the tests and the solution. It also writes
+`.graftree/runs/<run>/report.md`.
 
-Clean up the attempt worktrees (`git worktree remove`). Keep the branches unless
-the user asks you to delete them.
+Before telling the user it's done, read the final diff
+(`git diff <their HEAD>..graftree/<run>/final`) and the report. Give them a short
+summary: what changed, which worker and attempt won each node and why, what was
+rejected, the check results, and any risk you still see. Don't merge the branch
+into their work unless they ask you to.
+
+If the final checks fail, the run goes back to `awaiting_closer` with the reason.
+Fix it with an `attempt` on the root, then `decide`, then `close` again.
 
 ## Non-negotiables
 

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { cleanEnv } from "../exec.js";
 import type { CliWorker } from "../schema.js";
 import type { WorkerResult, WorkerTask } from "./types.js";
 
@@ -60,7 +61,7 @@ export async function runCliWorker(name: string, w: CliWorker, task: WorkerTask)
     }>((resolve, reject) => {
       const child = spawn(cmd!, args, {
         cwd: task.cwd,
-        env: { ...process.env, ...w.env },
+        env: cleanEnv(w.env),
         stdio: ["ignore", "pipe", "pipe"],
       });
       let out = "";

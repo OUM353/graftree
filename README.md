@@ -31,19 +31,10 @@ OpenRouter, or local models, can do the planning, solving and review work.
 
 ## Status
 
-**v0.1: planning phase.** Working and tested so far:
-
-- Run store and the `tree.json` protocol, with a JSON Schema in `schema/`.
-- Plan validation: seams, depth, disjoint ownership, tests-first.
-- Planning by the closer or by a CLI worker in a throwaway worktree.
-- The human approval gate, which locks tests into a base commit without touching your branch.
-- Lock checks against candidate commits.
-- Workers: CLI agents (CommandCode, OpenCode, `claude -p`, …) and OpenAI-compatible APIs (OpenRouter, Ollama, …).
-- The Claude Code skill.
-
-Automated `solve` / `integrate` / `close` commands come next. Until then, the
-skill walks the closer through those phases with the same protocol. See
-[DESIGN.md](DESIGN.md).
+**v0.2: the full loop runs.** Plan → approval → solve → verify → repair → review
+→ integrate → close. It is covered by end-to-end tests that use a scripted fake
+agent. Two parts still need live testing on a real machine: CommandCode's JSON
+output format and OpenRouter tool calling. See [Verification status](#verification-status).
 
 ## Install
 
@@ -89,7 +80,18 @@ graftree new "Fix race in the job scheduler's retry path" --tier focused
 graftree plan --file plan.json                   # or: graftree plan --worker cc-deepseek-flash
 graftree show                                    # review .graftree/runs/<id>/plan.md
 graftree approve --notes "go"                    # or: graftree reject --notes "…"
+
+graftree run                                     # solve + verify + integrate; stops for decisions
+graftree diff parser 2                           # inspect a candidate
+graftree decide parser 2 --notes "smallest correct diff"
+graftree run                                     # continue (integration, next decisions)
+graftree close                                   # final checks → branch graftree/<run>/final + report.md
 ```
+
+The engine never picks winners on its own unless you set `budgets.autoSelect: true`
+or pass `run --auto-select` (for CI). Other commands: `retry NODE` (more attempts),
+`attempt NODE --worktree P` (submit your own candidate through the same gates),
+`clean` (remove worktrees).
 
 Add `--json` to any command for machine-readable output.
 
@@ -123,6 +125,29 @@ roles:                               # "closer" = the invoking agent does it its
 Smoke-test a worker with `graftree worker test cc-deepseek-flash`. For
 CommandCode, install it with `npm i -g command-code` and run `cmd login` first.
 
+## What gets verified
+
+Each candidate passes through these gates in order. Failing any one of them rules it out:
+
+1. **Locked tests:** the acceptance tests approved by the human are unchanged.
+2. **Ownership:** every edit is inside the node's `ownedPaths`. For an
+   integration, edits must be in `sharedPaths` or in parent paths that no child owns.
+3. **Build:** `commands.build` passes, if set.
+4. **Acceptance:** the node's test command passes. For a split, every
+   descendant's command must pass too.
+
+Passing candidates are then scored on diff size, lint, repairs needed and review
+verdict. The closer decides which one wins.
+
+## Verification status
+
+| Part | How it's verified |
+|---|---|
+| Engine, gates, repair, integration, close | Automated end-to-end tests using a scripted fake CLI agent |
+| API worker tool loop | Tests against a mocked OpenAI-compatible server |
+| CommandCode worker | Flags taken from `cmd --help` (v1.65). **Its JSON output parsing still needs a live run** |
+| OpenRouter | The request format is standard, but **no live call has been made yet** |
+
 ## Safety
 
 - Workers run model-written code, and CLI workers typically run with their
@@ -131,7 +156,10 @@ CommandCode, install it with `npm i -g command-code` and run `cmd login` first.
   acceptable, or inside a container.
 - API keys are read only from environment variables.
 - Approval never modifies your working tree, index, or current branch. The base
-  commit lives under `refs/graftree/<run>/base`.
+  commit lives under `refs/graftree/<run>/base`. Results land on their own branches.
+- Attempt worktrees live in `.graftree/runs/<id>/wt/` until `close` (or `clean`)
+  removes them. If your test runner scans every directory without respecting
+  `.gitignore`, exclude `.graftree/` from it.
 
 ## Development
 

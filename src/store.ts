@@ -62,6 +62,7 @@ export class Store {
       nodes: {},
       feedback: [],
       approval: null,
+      final: null,
       history: [{ at: ts, event: "created" }],
     };
     await this.ensureGitignore();

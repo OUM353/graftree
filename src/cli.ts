@@ -6,7 +6,9 @@ import { parseArgs } from "node:util";
 import { z } from "zod";
 import { CONFIG_TEMPLATE_PATH, PACKAGE_ROOT, getWorker, loadConfig } from "./config.js";
 import { approveRun, checkLocked, newRun, planWithWorker, rejectRun, submitPlan } from "./lifecycle.js";
+import { closeRun } from "./close.js";
 import { renderTree, type PlanCheck } from "./plan.js";
+import { addExternalAttempt, attemptDiff, decide, removeRunWorktrees, retry, runTree, summarize, type RunSummary } from "./solve.js";
 import { Config, Plan, Run, Tier } from "./schema.js";
 import { Store } from "./store.js";
 import { GraftreeError } from "./util.js";
@@ -30,11 +32,22 @@ Plan phase (nothing is spent on solving before approval)
   approve [run] [--notes "…"]        Human gate: lock tests, create base commit
   reject  [run] --notes "…"          Send the plan back for replanning
 
+Solve phase (after approval)
+  run [run] [--auto-select]          Solve leaves, integrate splits; stops when the closer must decide
+  diff NODE ATTEMPT [--run R]        Show an attempt's diff against its node base
+  decide NODE ATTEMPT [--run R] [--notes "…"]
+                                     Closer's selection (only passing attempts)
+  retry NODE [--count N] [--run R]   More engine attempts for a leaf
+  attempt NODE (--worktree P | --commit REV) [--run R] [--notes "…"]
+                                     Submit a closer-made candidate (same gates)
+  close [run] [--keep-worktrees]     Final checks, final branch, report.md
+  clean [run]                        Remove the run's worktrees (branches are kept)
+
 Checks
   lock-check [run] --commit REV      Verify a candidate commit left locked tests untouched
   worker test NAME ["prompt"]        Smoke-test a configured worker
 
-[run] defaults to the most recent run ("latest").
+[run] / --run default to the most recent run ("latest"). ATTEMPT is a number or aN.
 `;
 
 type Out = { json: boolean };
@@ -64,6 +77,25 @@ function reportPlanCheck(out: Out, run: Run, check: PlanCheck, store: Store, ext
   return 0;
 }
 
+function attemptNo(s: string): number {
+  const n = Number(s.replace(/^a/i, ""));
+  if (!Number.isInteger(n) || n < 1) throw new GraftreeError(`invalid attempt "${s}" (use 2 or a2)`, "invalid");
+  return n;
+}
+
+function humanSummary(sum: RunSummary): string {
+  const lines = [`Run ${sum.run}: ${sum.status}`];
+  for (const d of sum.decisions) {
+    lines.push("", `◆ ${d.node} (${d.status}) — ${d.awaiting ?? ""}`);
+    for (const c of d.candidates) {
+      const stat = c.diffStat ? ` +${c.diffStat.insertions}/−${c.diffStat.deletions}` : "";
+      lines.push(`    a${c.n} ${c.worker.padEnd(18)} ${c.status.padEnd(12)}${c.score !== undefined ? ` score ${c.score}` : ""}${stat}${c.review ? ` review:${c.review}` : ""}${d.recommended === c.n ? "  ← recommended" : ""}`);
+    }
+  }
+  lines.push("", `Next: ${sum.next}`);
+  return lines.join("\n");
+}
+
 async function main(argv: string[]): Promise<number> {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -76,6 +108,11 @@ async function main(argv: string[]): Promise<number> {
       worker: { type: "string" },
       notes: { type: "string" },
       commit: { type: "string" },
+      run: { type: "string" },
+      worktree: { type: "string" },
+      count: { type: "string" },
+      "auto-select": { type: "boolean" },
+      "keep-worktrees": { type: "boolean", default: false },
       force: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
       version: { type: "boolean", short: "v", default: false },
@@ -159,11 +196,89 @@ async function main(argv: string[]): Promise<number> {
       const run = await store.loadRun(rest[0]);
       const lines = [`Run ${run.id} — ${run.status}`, `Problem: ${run.problem}`];
       if (run.plan) {
-        lines.push("", renderTree(run.plan, (n) => `${n.id} [${n.kind}] (${run.nodes[n.id]?.status ?? "?"}) ${n.goal}`));
+        lines.push(
+          "",
+          renderTree(run.plan, (n) => {
+            const s = run.nodes[n.id]!;
+            const atts = s.attempts.map((a) => `a${a.n}:${a.status}${a.n === s.winner ? "★" : ""}`).join(" ");
+            return `${n.id} [${n.kind}] (${s.status}) ${atts}`;
+          }),
+        );
         lines.push("", `Plan: ${store.planMdPath(run.id)}`);
       }
       if (run.approval) lines.push(`Approved ${run.approval.approvedAt}; base ${run.approval.baseRef} = ${run.approval.baseCommit.slice(0, 12)}; ${run.approval.locked.length} test file(s) locked`);
+      const sum = summarize(run);
+      if (sum.decisions.length) lines.push("", humanSummary(sum));
+      if (run.final) lines.push(`Final: ${run.final.branch} (${run.final.commit.slice(0, 12)})`);
       print(out, lines.join("\n"), run);
+      return 0;
+    }
+
+    case "run": {
+      const sum = await runTree(store, rest[0], {
+        autoSelect: values["auto-select"],
+        onEvent: out.json ? undefined : (m) => process.stderr.write(`${m}\n`),
+      });
+      print(out, humanSummary(sum), sum);
+      return 0;
+    }
+
+    case "diff": {
+      const [node, att] = rest;
+      if (!node || !att) throw new GraftreeError("usage: graftree diff NODE ATTEMPT [--run R]", "invalid");
+      const diff = await attemptDiff(store, values.run, node, attemptNo(att));
+      print(out, diff || "(empty diff)", { node, attempt: attemptNo(att), diff });
+      return 0;
+    }
+
+    case "decide": {
+      const [node, att] = rest;
+      if (!node || !att) throw new GraftreeError("usage: graftree decide NODE ATTEMPT [--run R] [--notes …]", "invalid");
+      const run = await decide(store, values.run, node, attemptNo(att), values.notes);
+      const sum = summarize(run);
+      print(out, `${node}: a${attemptNo(att)} selected. Run is ${run.status}.\nNext: ${sum.next}`, { ok: true, ...sum });
+      return 0;
+    }
+
+    case "retry": {
+      const [node] = rest;
+      if (!node) throw new GraftreeError("usage: graftree retry NODE [--count N] [--run R]", "invalid");
+      const run = await retry(store, values.run, node, values.count ? Number(values.count) : 1);
+      print(out, `${node}: ${run.nodes[node]!.targetAttempts} attempts targeted. Next: graftree run ${run.id}`, { ok: true, run: run.id, node, targetAttempts: run.nodes[node]!.targetAttempts });
+      return 0;
+    }
+
+    case "attempt": {
+      const [node] = rest;
+      if (!node || (!values.worktree && !values.commit)) throw new GraftreeError("usage: graftree attempt NODE (--worktree PATH | --commit REV) [--run R]", "invalid");
+      const a = await addExternalAttempt(store, values.run, node, {
+        worktree: values.worktree ? resolve(values.worktree) : undefined,
+        commit: values.commit,
+        notes: values.notes,
+      });
+      const g = a.gates;
+      const detail = g ? [g.locked, g.ownership].flatMap((x) => x.violations).join("; ") : "";
+      print(out, `${node}/a${a.n} (closer): ${a.status}${detail ? ` — ${detail}` : ""}`, { ok: a.status === "passed", attempt: a });
+      return a.status === "passed" ? 0 : 4;
+    }
+
+    case "close": {
+      const res = await closeRun(store, rest[0], { keepWorktrees: values["keep-worktrees"] });
+      const lines = Object.entries(res.checks).map(([k, v]) => `  ${v.ok ? "✓" : "✗"} ${k}`);
+      print(
+        out,
+        res.ok
+          ? `Closed ${res.run.id}. Result: branch ${res.run.final!.branch}\n${lines.join("\n")}\nReport: ${res.report}`
+          : `Final checks FAILED for ${res.run.id}:\n${lines.join("\n")}\nReport: ${res.report}`,
+        { ok: res.ok, run: res.run.id, status: res.run.status, final: res.run.final, checks: res.checks, report: res.report },
+      );
+      return res.ok ? 0 : 5;
+    }
+
+    case "clean": {
+      const run = await store.loadRun(rest[0]);
+      await removeRunWorktrees(store, run);
+      print(out, `Removed worktrees for ${run.id} (branches kept).`, { ok: true, run: run.id });
       return 0;
     }
 
@@ -209,7 +324,7 @@ async function main(argv: string[]): Promise<number> {
       const cfg = await loadConfig(store.configPath);
       const w = getWorker(cfg, rest[1]);
       const prompt = rest[2] ?? "Reply with exactly: GRAFTREE OK";
-      const res = await runWorker(rest[1], w, { prompt, cwd: store.root, timeoutSec: 300 });
+      const res = await runWorker(rest[1], w, { prompt, cwd: store.root, timeoutSec: 300 }, "complete");
       print(
         out,
         `${res.ok ? "✓" : "✗"} ${res.worker} (exit ${res.exitCode}${res.timedOut ? ", timed out" : ""}, ${res.durationMs} ms)\n${res.text || res.stderr}`,

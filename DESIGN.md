@@ -270,13 +270,26 @@ graftree worker test NAME ["prompt"]
 graftree schema [plan|run|config]
 ```
 
-Next:
+Solve phase (v0.2):
 
 ```
-graftree run   <run>                       # solve → verify → integrate (resumable)
-graftree decide <run> <node> <attempt>     # closer's selection when needed
-graftree close <run>                       # final checks + report; closer signs off
+graftree run [run] [--auto-select]         # solve → verify → repair → review → integrate; resumable
+graftree diff NODE N [--run R]             # candidate diff vs. node base
+graftree decide NODE N [--run R] [--notes] # closer's selection (passing attempts only)
+graftree retry NODE [--count N]            # more engine attempts for a leaf
+graftree attempt NODE --worktree P | --commit REV   # closer-made candidate, same gates
+graftree close [run]                       # final checks → graftree/<run>/final + report.md
+graftree clean [run]                       # remove worktrees (branches kept)
 ```
+
+Engine details:
+- Leaf attempts branch from `refs/graftree/<run>/base`. A split's base is a merge
+  commit of its children's winners (branch `graftree/<run>/<node>/merge`).
+- Attempt 1 of a split is the plain merge. Glue comes from integrator workers
+  (as repair rounds) or from the closer (`attempt`).
+- A crashed `run` resumes: unfinished attempts are dropped and rerun. A lock file
+  prevents two engines from working on the same run.
+- Changing a winner resets every ancestor, because their merges are now stale.
 
 The engine **pauses and returns control** every time a closer decision is needed
 (status `awaiting_closer`). This is how a root agent like Claude Code stays the

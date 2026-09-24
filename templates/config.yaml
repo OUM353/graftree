@@ -49,15 +49,24 @@ roles:
   integrator: [closer]
   reviewer: [cc-deepseek-flash]
 
+# Paths never snapshotted from worker worktrees, such as an agent CLI's own
+# metadata dir. Anything else a worker leaves behind counts against ownership.
+ignore: []
+
 budgets:
   # attemptsPerLeaf: 3        # default comes from the tier
   maxRepairRounds: 2
   maxRedecompositions: 1
   maxWallMinutes: 240
   concurrency: 3
+  autoSelect: false           # true = engine picks winners itself (headless/CI); default: the closer decides
 
-# Repo-wide checks used as regression gates (optional).
+# Repo-wide commands (all optional). Worktrees live under .graftree/runs/<id>/wt/
+# inside the repo, so tools that resolve dependencies upward (node_modules,
+# virtualenvs on PATH) usually just work. If not, use `setup`.
 commands:
-  # test: npm test
-  # build: npm run build
-  # lint: npm run lint
+  # setup: npm ci               # run in each fresh worktree before a worker starts
+  # build: npm run build        # gate for every candidate
+  # test: npm test              # gate at close
+  # lint: npm run lint          # scored per candidate, gate at close
+  timeoutSec: 900

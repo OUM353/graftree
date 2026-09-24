@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Plan, TIER_DEFAULTS, type Run } from "./schema.js";
+import { Plan, TIER_DEFAULTS, type NodeState, type Run } from "./schema.js";
 
 export const PLANNER_OUT_DIR = ".graftree-out";
 
@@ -61,5 +61,121 @@ ${planJsonSchema()}
 \`\`\`
 
 When done, reply with one line: PLAN WRITTEN.
+`;
+}
+
+// ---------------------------------------------------------------------------
+// Solve / integrate / review prompts
+// ---------------------------------------------------------------------------
+
+const bullet = (xs: string[]) => (xs.length ? xs.map((x) => `- ${x}`).join("\n") : "- (none)");
+
+function nodeBrief(run: Run, node: NodeState): string {
+  const siblings = Object.values(run.nodes).filter((n) => n.parent === node.parent && n.id !== node.id);
+  const consumed = siblings.filter((s) => node.dependsOn.includes(s.id) || s.contract.exposes.some((e) => node.contract.consumes.some((c) => e.includes(c))));
+  return `## Overall problem
+
+${run.problem}
+
+## Your node: ${node.id}
+
+Goal: ${node.goal}
+
+Interfaces you must PROVIDE (exactly):
+${bullet(node.contract.exposes)}
+
+Interfaces you CONSUME (code against these; siblings are building them in parallel):
+${bullet(node.contract.consumes)}
+${consumed.length ? `\nSibling contracts you rely on:\n${consumed.map((s) => `- ${s.id}: ${s.contract.exposes.join("; ") || s.goal}`).join("\n")}\n` : ""}
+You may ONLY modify files matching:
+${bullet(node.ownedPaths)}
+
+Acceptance: this command must exit 0 from the repo root:
+    ${node.acceptance.command}
+Acceptance test files (read them first; they define "done"):
+${bullet(node.acceptance.files)}
+${node.acceptance.rubric ? `\nAlso satisfy this rubric: ${node.acceptance.rubric}\n` : ""}`;
+}
+
+const HARD_RULES = `## Hard rules
+
+- NEVER modify, delete, or rename acceptance test files. Changing them disqualifies your work.
+- Edit only the allowed paths. Edits elsewhere disqualify your work.
+- Run the acceptance command yourself and iterate until it passes.
+- Prefer the smallest correct change that fits the codebase's existing style.
+- Do not commit or push; the engine snapshots your working tree.`;
+
+export function solverPrompt(run: Run, node: NodeState): string {
+  return `You are a SOLVER in graftree, a system that values correctness over speed.
+Several independent solvers work on this same node; the best verified result wins.
+
+${nodeBrief(run, node)}
+${HARD_RULES}
+
+When finished, reply with a short summary of the change and the final acceptance result.
+`;
+}
+
+export function repairPrompt(run: Run, node: NodeState, failure: string): string {
+  return `You are REPAIRING a graftree attempt. The working tree already contains a previous attempt at
+this node, and it FAILED verification. Fix it. Do not start over unless the approach is wrong.
+
+## Failure
+
+\`\`\`
+${failure}
+\`\`\`
+
+${nodeBrief(run, node)}
+${HARD_RULES}
+`;
+}
+
+export function integratorPrompt(run: Run, node: NodeState, allowed: string[], failure: string): string {
+  const kids = Object.values(run.nodes).filter((n) => n.parent === node.id);
+  return `You are the INTEGRATOR for graftree node "${node.id}". The working tree contains the merged,
+individually verified results of its children:
+${kids.map((k) => `- ${k.id}: ${k.goal}`).join("\n")}
+
+Wire them together so the node's goal is met. Change as little as possible; the children's
+code already passed their own tests, so prefer glue over rewrites.
+
+## Node goal
+
+${node.goal}
+
+## Current failure
+
+\`\`\`
+${failure}
+\`\`\`
+
+You may ONLY modify files matching:
+${bullet(allowed)}
+
+Acceptance: this command must exit 0 from the repo root:
+    ${node.acceptance.command}
+
+${HARD_RULES}
+`;
+}
+
+export function reviewerPrompt(run: Run, node: NodeState, diff: string): string {
+  return `You are an ADVERSARIAL REVIEWER in graftree. The change below already passes its tests.
+Your job is to find what the tests missed: inputs, edge cases, concurrency, error paths,
+or contract violations where the code is WRONG. Do not modify any files.
+
+${nodeBrief(run, node)}
+## Diff
+
+\`\`\`diff
+${diff}
+\`\`\`
+
+Reply in this format:
+VERDICT: pass | concerns | fail
+ISSUES:
+- [severity high|medium|low] <file:line> <what is wrong> — <input or case that shows it>
+(write "ISSUES: none" if you find nothing real; do not invent problems)
 `;
 }
