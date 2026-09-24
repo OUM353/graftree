@@ -171,6 +171,28 @@ export function renderTree(plan, label = (n) => `${n.id} [${n.kind}] ${n.goal}`)
         walk(r, "", true, true);
     return lines.join("\n");
 }
+/** How much a plan will cost in worker calls, before anything is spent. A single-agent run is one call. */
+export function estimateWork(plan, cfg) {
+    const attempts = cfg.budgets.attemptsPerLeaf ?? TIER_DEFAULTS[plan.tier].attemptsPerLeaf;
+    const leaves = plan.nodes.filter((n) => n.kind === "leaf").length;
+    const splits = plan.nodes.length - leaves;
+    const byWorker = (names, i) => names[i % names.length] !== CLOSER;
+    const solverRuns = leaves * Array.from({ length: attempts }, (_, i) => byWorker(cfg.roles.solver, i)).filter(Boolean).length;
+    const integrations = cfg.roles.integrator.some((n) => n !== CLOSER) ? splits : 0;
+    const reviewing = cfg.roles.reviewer.some((n) => n !== CLOSER);
+    const minCalls = solverRuns + integrations + (reviewing ? plan.nodes.length : 0);
+    const repairs = (cfg.budgets.repairAll ? solverRuns : leaves) * cfg.budgets.maxRepairRounds;
+    const maxCalls = solverRuns + repairs + integrations + (reviewing ? leaves * attempts + splits : 0);
+    const closerWorks = Object.values(cfg.roles).some((names) => names.includes(CLOSER));
+    return { leaves, splits, attemptsPerLeaf: attempts, solverRuns, minCalls, maxCalls, closerWorks };
+}
+/** One-line cost notice shown before approval. */
+export function estimateNotice(e) {
+    const range = e.minCalls === e.maxCalls ? `${e.minCalls}` : `${e.minCalls}–${e.maxCalls}`;
+    return (`⚠ Cost: expect ${range} worker calls (a single-agent run is 1)` +
+        (e.closerWorks ? ", plus the closer's own planning, review and decisions, which graftree does not meter" : "") +
+        ". graftree pays off on hard problems; for a small, clear task a single agent is usually as accurate and far cheaper.");
+}
 /** Human-readable plan for the approval checkpoint. */
 export function renderPlanMarkdown(run, cfg) {
     const pending = run.pendingRedecomposition;
@@ -224,10 +246,11 @@ export function renderPlanMarkdown(run, cfg) {
     md.push(`| Role | Assigned |`, `|---|---|`);
     for (const [role, names] of Object.entries(cfg.roles))
         md.push(`| ${role} | ${who(names)} |`);
-    md.push("", "## Estimated work (upper bound before repairs)", "");
-    md.push(`- Solver runs: ${leaves.length} leaves × ${attempts} attempts = **${leaves.length * attempts}**`);
-    md.push(`- Integrations: **${splits.length}**`);
-    md.push(`- Reviews: **${splits.length + 1}** (one per merge + final)`);
+    const est = estimateWork(plan, cfg);
+    md.push("", "## Estimated cost", "", `> ${estimateNotice(est)}`, "");
+    md.push(`- Worker calls: **${est.minCalls}** if every attempt passes first time, up to **${est.maxCalls}** with every repair round used`);
+    md.push(`- Solver runs: ${leaves.length} leaves × ${attempts} attempts${est.solverRuns === leaves.length * attempts ? "" : ` (${est.solverRuns} by workers, the rest by the closer)`}`);
+    md.push(`- Integrations: ${splits.length}; reviews: at least one per node`);
     const b = cfg.budgets;
     const warn = [b.warnTokens && `${b.warnTokens.toLocaleString("en-US")} tokens`, b.warnCalls && `${b.warnCalls} calls`, b.warnAttemptTokens && `${b.warnAttemptTokens.toLocaleString("en-US")} tokens in one attempt`].filter(Boolean);
     if (warn.length)

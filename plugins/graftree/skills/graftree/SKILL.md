@@ -1,6 +1,6 @@
 ---
 name: graftree
-description: Solve hard, high-stakes coding problems with maximum accuracy by decomposing them into a tree of independent sub-tasks, writing acceptance tests first, solving each leaf with several independent attempts (optionally across multiple models such as DeepSeek via CommandCode or OpenRouter), and merging verified results upward into one best solution. You remain the final decision-maker (the "closer"). Pauses for human approval of the decomposition before spending effort on solving. Use when the user asks for graftree, a tree/deep/high-accuracy solve, or for a difficult bug, algorithm, or multi-module feature where correctness matters more than speed. Not for quick edits.
+description: Solve hard, high-stakes coding problems with maximum accuracy by decomposing them into a tree of independent sub-tasks, writing acceptance tests first, solving each leaf with several independent attempts (optionally across multiple models such as DeepSeek via CommandCode or OpenRouter), and merging verified results upward into one best solution. You remain the final decision-maker (the "closer"). Pauses for human approval of the decomposition before spending effort on solving. Use when the user asks for graftree, a tree/deep/high-accuracy solve, or for a difficult bug, algorithm, or multi-module feature where correctness matters more than speed. Costly: expect several to dozens of times the tokens of a single-agent run, so not for quick edits or small, clearly specified tasks.
 ---
 
 # graftree: tree-structured, test-first problem solving
@@ -33,7 +33,20 @@ If neither works, tell the user to install it (`npm i -g graftree-agent`), then 
 ## Phase 1: Understand and triage
 
 Read the relevant code before planning. Identify the real problem, the existing
-test framework, and how to run tests. Then pick a tier:
+test framework, and how to run tests.
+
+**First decide whether graftree is worth it.** A run costs many worker calls
+(several attempts per leaf, repairs, reviews) plus your own planning and review,
+often 5–30× the tokens of one agent solving the task directly. It pays off when
+a single agent is likely to get something subtly wrong: many interacting
+requirements, tricky edge cases, a vague spec that needs good tests, a bug
+nobody has pinned down. For a small or clearly specified task, tell the user a
+single agent is likely as accurate and far cheaper, and use graftree only if they
+still want it. (In a measured run on a clear ~60-line spec, a single agent and
+graftree both scored 25/25 on a hidden test suite; graftree used 6× the worker
+calls plus the closer's work.)
+
+Then pick a tier:
 
 | Tier | Use for | Max depth | Attempts per leaf |
 |---|---|---|---|
@@ -92,8 +105,15 @@ If the output has `ok: false`, fix every listed error and resubmit.
 ## Phase 3: ⏸ Human approval (mandatory)
 
 Show the user a short summary of the plan: the tree, what each node does, the
-contracts, the test files, the tier, which workers will run, and the estimated
-number of solver runs. Give them the path to `plan.md`. Then **stop and wait**.
+contracts, the test files, the tier, and which workers will run. Give them the
+path to `plan.md`. Then **stop and wait**.
+
+**Always state the cost before asking for approval.** Quote the `⚠ Cost:` line
+that `plan` prints (also in `plan.md` and the `estimate` field of `--json`):
+the range of worker calls, compared with 1 for a single agent. Add that your
+own planning and review as closer are not metered. If the plan looks
+expensive for the problem, say so and offer a cheaper shape (fewer attempts
+per leaf, a shallower tier, or no graftree at all).
 
 - Run `$GT approve <run> --json` **only after the user explicitly approves.**
   Never approve on their behalf, and never treat silence as approval.

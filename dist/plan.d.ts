@@ -16,6 +16,23 @@ export declare function nodesFromPlan(plan: Plan): Record<string, NodeState>;
 export declare function allAcceptanceFiles(plan: Plan): string[];
 /** Tree drawing, e.g. for plan.md and `graftree show`. */
 export declare function renderTree(plan: Plan, label?: (n: PlanNode) => string): string;
+export interface WorkEstimate {
+    leaves: number;
+    splits: number;
+    attemptsPerLeaf: number;
+    /** Attempts run by engine workers (the rest are the closer's own). */
+    solverRuns: number;
+    /** Worker calls if every attempt passes first time: solves + integrations + one review per node. */
+    minCalls: number;
+    /** Worker calls if every failing attempt uses its whole repair budget and every candidate gets reviewed. */
+    maxCalls: number;
+    /** True when the closer (the root agent) also plans, solves, integrates or reviews; that usage is not metered. */
+    closerWorks: boolean;
+}
+/** How much a plan will cost in worker calls, before anything is spent. A single-agent run is one call. */
+export declare function estimateWork(plan: Plan, cfg: Config): WorkEstimate;
+/** One-line cost notice shown before approval. */
+export declare function estimateNotice(e: WorkEstimate): string;
 /** Human-readable plan for the approval checkpoint. */
 export declare function renderPlanMarkdown(run: Run, cfg: Config): string;
 /**

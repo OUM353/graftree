@@ -184,6 +184,46 @@ export function renderTree(plan: Plan, label: (n: PlanNode) => string = (n) => `
   return lines.join("\n");
 }
 
+export interface WorkEstimate {
+  leaves: number;
+  splits: number;
+  attemptsPerLeaf: number;
+  /** Attempts run by engine workers (the rest are the closer's own). */
+  solverRuns: number;
+  /** Worker calls if every attempt passes first time: solves + integrations + one review per node. */
+  minCalls: number;
+  /** Worker calls if every failing attempt uses its whole repair budget and every candidate gets reviewed. */
+  maxCalls: number;
+  /** True when the closer (the root agent) also plans, solves, integrates or reviews; that usage is not metered. */
+  closerWorks: boolean;
+}
+
+/** How much a plan will cost in worker calls, before anything is spent. A single-agent run is one call. */
+export function estimateWork(plan: Plan, cfg: Config): WorkEstimate {
+  const attempts = cfg.budgets.attemptsPerLeaf ?? TIER_DEFAULTS[plan.tier].attemptsPerLeaf;
+  const leaves = plan.nodes.filter((n) => n.kind === "leaf").length;
+  const splits = plan.nodes.length - leaves;
+  const byWorker = (names: string[], i: number) => names[i % names.length] !== CLOSER;
+  const solverRuns = leaves * Array.from({ length: attempts }, (_, i) => byWorker(cfg.roles.solver, i)).filter(Boolean).length;
+  const integrations = cfg.roles.integrator.some((n) => n !== CLOSER) ? splits : 0;
+  const reviewing = cfg.roles.reviewer.some((n) => n !== CLOSER);
+  const minCalls = solverRuns + integrations + (reviewing ? plan.nodes.length : 0);
+  const repairs = (cfg.budgets.repairAll ? solverRuns : leaves) * cfg.budgets.maxRepairRounds;
+  const maxCalls = solverRuns + repairs + integrations + (reviewing ? leaves * attempts + splits : 0);
+  const closerWorks = Object.values(cfg.roles).some((names) => names.includes(CLOSER));
+  return { leaves, splits, attemptsPerLeaf: attempts, solverRuns, minCalls, maxCalls, closerWorks };
+}
+
+/** One-line cost notice shown before approval. */
+export function estimateNotice(e: WorkEstimate): string {
+  const range = e.minCalls === e.maxCalls ? `${e.minCalls}` : `${e.minCalls}–${e.maxCalls}`;
+  return (
+    `⚠ Cost: expect ${range} worker calls (a single-agent run is 1)` +
+    (e.closerWorks ? ", plus the closer's own planning, review and decisions, which graftree does not meter" : "") +
+    ". graftree pays off on hard problems; for a small, clear task a single agent is usually as accurate and far cheaper."
+  );
+}
+
 /** Human-readable plan for the approval checkpoint. */
 export function renderPlanMarkdown(run: Run, cfg: Config): string {
   const pending = run.pendingRedecomposition;
@@ -231,10 +271,11 @@ export function renderPlanMarkdown(run: Run, cfg: Config): string {
   md.push("## Workers", "");
   md.push(`| Role | Assigned |`, `|---|---|`);
   for (const [role, names] of Object.entries(cfg.roles)) md.push(`| ${role} | ${who(names)} |`);
-  md.push("", "## Estimated work (upper bound before repairs)", "");
-  md.push(`- Solver runs: ${leaves.length} leaves × ${attempts} attempts = **${leaves.length * attempts}**`);
-  md.push(`- Integrations: **${splits.length}**`);
-  md.push(`- Reviews: **${splits.length + 1}** (one per merge + final)`);
+  const est = estimateWork(plan, cfg);
+  md.push("", "## Estimated cost", "", `> ${estimateNotice(est)}`, "");
+  md.push(`- Worker calls: **${est.minCalls}** if every attempt passes first time, up to **${est.maxCalls}** with every repair round used`);
+  md.push(`- Solver runs: ${leaves.length} leaves × ${attempts} attempts${est.solverRuns === leaves.length * attempts ? "" : ` (${est.solverRuns} by workers, the rest by the closer)`}`);
+  md.push(`- Integrations: ${splits.length}; reviews: at least one per node`);
   const b = cfg.budgets;
   const warn = [b.warnTokens && `${b.warnTokens.toLocaleString("en-US")} tokens`, b.warnCalls && `${b.warnCalls} calls`, b.warnAttemptTokens && `${b.warnAttemptTokens.toLocaleString("en-US")} tokens in one attempt`].filter(Boolean);
   if (warn.length) md.push(`- Usage warnings at: ${warn.join(", ")}`);

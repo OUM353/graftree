@@ -8,7 +8,7 @@ import { z } from "zod";
 import { CONFIG_TEMPLATE_PATH, PACKAGE_ROOT, getWorker, loadConfig } from "./config.js";
 import { approveRun, checkLocked, newRun, planWithWorker, rejectRun, submitPlan } from "./lifecycle.js";
 import { closeRun } from "./close.js";
-import { renderTree, type PlanCheck } from "./plan.js";
+import { estimateNotice, estimateWork, renderTree, type PlanCheck } from "./plan.js";
 import { approveRedecomposition, proposeRedecomposition, rejectRedecomposition } from "./redecompose.js";
 import { addExternalAttempt, attemptDiff, decide, harden, removeRunWorktrees, retry, runTree, summarize, type RunSummary } from "./solve.js";
 import { formatUsage, runUsage } from "./usage.js";
@@ -65,7 +65,7 @@ function print(out: Out, human: string, data: unknown): void {
   else process.stdout.write(`${human}\n`);
 }
 
-function reportPlanCheck(out: Out, run: Run, check: PlanCheck, store: Store, extra: Record<string, unknown> = {}): number {
+function reportPlanCheck(out: Out, run: Run, check: PlanCheck, store: Store, cfg: Config, extra: Record<string, unknown> = {}): number {
   if (!check.plan) {
     print(out, `Plan rejected by validation:\n${check.errors.map((e) => `  ✗ ${e}`).join("\n")}`, {
       ok: false,
@@ -77,10 +77,11 @@ function reportPlanCheck(out: Out, run: Run, check: PlanCheck, store: Store, ext
     return 2;
   }
   const warn = check.warnings.length ? `\nWarnings:\n${check.warnings.map((w) => `  ! ${w}`).join("\n")}` : "";
+  const estimate = estimateWork(check.plan, cfg);
   print(
     out,
-    `Plan accepted for ${run.id} — status: awaiting_approval\n\n${renderTree(check.plan)}${warn}\n\nReview: ${store.planMdPath(run.id)}\nThen:  graftree approve ${run.id}   or   graftree reject ${run.id} --notes "…"`,
-    { ok: true, run: run.id, status: "awaiting_approval", planMd: store.planMdPath(run.id), warnings: check.warnings, ...extra },
+    `Plan accepted for ${run.id} — status: awaiting_approval\n\n${renderTree(check.plan)}${warn}\n\n${estimateNotice(estimate)}\n\nReview: ${store.planMdPath(run.id)}\nThen:  graftree approve ${run.id}   or   graftree reject ${run.id} --notes "…"`,
+    { ok: true, run: run.id, status: "awaiting_approval", planMd: store.planMdPath(run.id), warnings: check.warnings, estimate, ...extra },
   );
   return 0;
 }
@@ -209,12 +210,12 @@ async function main(argv: string[]): Promise<number> {
         const extra = {
           worker: { name: res.worker.worker, ok: res.worker.ok, exitCode: res.worker.exitCode, timedOut: res.worker.timedOut, durationMs: res.worker.durationMs },
         };
-        return reportPlanCheck(out, run, res, store, extra);
+        return reportPlanCheck(out, run, res, store, await loadConfig(store.configPath), extra);
       }
       if (!values.file) throw new GraftreeError("plan needs --file plan.json or --worker NAME", "invalid");
       const planJson = JSON.parse(await readFile(resolve(values.file), "utf8")) as unknown;
       const check = await submitPlan(store, run, planJson, { testsFrom: values.tests ? resolve(values.tests) : undefined });
-      return reportPlanCheck(out, run, check, store);
+      return reportPlanCheck(out, run, check, store, await loadConfig(store.configPath));
     }
 
     case "show": {
@@ -378,11 +379,13 @@ async function main(argv: string[]): Promise<number> {
       }
       const run = await approveRun(store, pending, values.notes);
       const a = run.approval!;
-      print(out, `Approved ${run.id}. Locked ${a.locked.length} test file(s). Base: ${a.baseRef} (${a.baseCommit.slice(0, 12)})`, {
+      const estimate = estimateWork(run.plan!, await loadConfig(store.configPath));
+      print(out, `Approved ${run.id}. Locked ${a.locked.length} test file(s). Base: ${a.baseRef} (${a.baseCommit.slice(0, 12)})\n${estimateNotice(estimate)}`, {
         ok: true,
         run: run.id,
         status: run.status,
         approval: a,
+        estimate,
       });
       return 0;
     }
