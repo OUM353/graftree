@@ -1,4 +1,4 @@
-# Agent-tree — Design (v0 draft)
+# graftree — Design (v0.1)
 
 An open-source, provider-agnostic engine for solving **hard coding problems** with
 tree logic: decompose a problem into independent sub-tasks, solve each with
@@ -23,7 +23,7 @@ up into a single best solution.
 4. **Verify at every merge.** No result moves up the tree until it passes its
    node's tests. A failure is repaired locally, in the smallest subtree that
    contains it.
-5. **Portable by protocol.** All state lives in plain files (`.agent-tree/`) and
+5. **Portable by protocol.** All state lives in plain files (`.graftree/`) and
    the engine is driven by a CLI. Any root agent that can run shell commands
    and read JSON can act as the closer.
 6. **Human gate before spending.** The run pauses after planning. Nothing is
@@ -39,11 +39,11 @@ up into a single best solution.
 │  API in standalone mode)                                     │
 │   • triage  • approve plan  • select  • final merge          │
 └───────────────▲──────────────────────────┬───────────────────┘
-                │ reads tree.json / reports │ agent-tree CLI commands
+                │ reads tree.json / reports │ graftree CLI commands
 ┌───────────────┴──────────────────────────▼───────────────────┐
-│  Engine (agent-tree CLI)                                     │
+│  Engine (graftree CLI)                                     │
 │   Tree scheduler · Worktree manager · Test runner · Budgets  │
-│   Run store (.agent-tree/runs/<id>/)                         │
+│   Run store (.graftree/runs/<id>/)                         │
 └───────────────┬──────────────────────────────────────────────┘
                 │ role → worker mapping (config)
 ┌───────────────▼──────────────────────────────────────────────┐
@@ -71,15 +71,19 @@ workers:
     type: cli
     command: ["opencode", "run", "--model", "{model}", "{prompt}"]
     model: anthropic/claude-sonnet-5
-  commandcode:
+  cc-deepseek-flash:                # CommandCode v1.65 headless flags, verified via `cmd --help`
     type: cli
-    command: ["commandcode", "{prompt}"]   # exact flags to be confirmed per tool
+    command: [cmd, -p, "{prompt}", -m, "{model}", --output-format, json,
+              --max-turns, "80", --yolo, --trust, --no-session,
+              --skip-onboarding, --no-auto-update]
+    model: deepseek/deepseek-v4.1-flash
+    output: ndjson
 ```
 
-> The exact non-interactive invocation for each third-party CLI (OpenCode,
-> CommandCode, and others) will be verified against its docs when its adapter
-> is written. The template mechanism keeps the engine independent of those
-> details.
+> The flags come from each CLI's own `--help`. The NDJSON result parser looks
+> for the last event with a result-like field, because the exact event shapes
+> differ between agents. That parser still needs to be checked against a live
+> CommandCode run.
 
 ### 2.2 Roles
 
@@ -161,7 +165,7 @@ It then stops with status `awaiting_approval`.
 
 - In **Claude Code**, the skill presents the plan and waits for the user.
 - In **standalone mode**, the CLI prompts on the terminal, or you run
-  `agent-tree approve <run>` later.
+  `graftree approve <run>` later.
 
 The human can approve, reject with notes (the planner revises), or edit the plan
 files directly and then approve.
@@ -210,7 +214,7 @@ chosen, and what was rejected and why.
 ## 4. Run store (the portable protocol)
 
 ```
-.agent-tree/
+.graftree/
   config.yaml                 # workers, roles, budgets, test commands
   runs/<run-id>/
     tree.json                 # authoritative state (schema below)
@@ -251,15 +255,27 @@ selected → integrating → done`, plus `failed`, `escalated`, `redecomposed`.
 
 ## 5. CLI surface
 
+Implemented in v0.1 (every command accepts `--json`; `[run]` defaults to the latest run):
+
 ```
-agent-tree init                         # create .agent-tree/config.yaml
-agent-tree plan  "<problem>" [--tier]   # triage + plan + tests → awaiting_approval
-agent-tree show  <run>                  # print plan / tree status
-agent-tree approve <run> [--notes …]    # human gate
-agent-tree reject  <run> --notes "…"    # replan
-agent-tree run   <run>                  # solve → verify → integrate (resumable)
-agent-tree decide <run> <node> <attempt># closer's selection when needed
-agent-tree close <run>                  # final checks + report; closer signs off
+graftree init                              # create .graftree/config.yaml (+ .gitignore for runs/)
+graftree new "<problem>" [--tier T]        # T: auto|focused|standard|deep
+graftree plan [run] --file plan.json [--tests DIR]   # closer-authored plan
+graftree plan [run] --worker NAME          # CLI worker plans + drafts tests in a throwaway worktree
+graftree show [run] | list
+graftree approve [run] [--notes …]         # human gate: lock tests, create refs/graftree/<run>/base
+graftree reject  [run] --notes "…"         # feedback goes to the next planning round
+graftree lock-check [run] --commit REV     # exit 3 if a candidate touched locked tests
+graftree worker test NAME ["prompt"]
+graftree schema [plan|run|config]
+```
+
+Next:
+
+```
+graftree run   <run>                       # solve → verify → integrate (resumable)
+graftree decide <run> <node> <attempt>     # closer's selection when needed
+graftree close <run>                       # final checks + report; closer signs off
 ```
 
 The engine **pauses and returns control** every time a closer decision is needed
@@ -270,16 +286,18 @@ decision-maker without the engine having to call it.
 
 ## 6. Distribution
 
-- **Engine:** a Python package (`pipx install agent-tree` / `uvx agent-tree`).
-  Its dependencies are an HTTP client, a YAML parser, and git on PATH.
-- **Claude Code skill:** `skills/agent-tree/SKILL.md` teaches Claude the lifecycle,
-  when to call each CLI command, and how to make closer decisions.
-- **Other root agents** (OpenCode, Codex, and others): the same CLI with a short
-  instructions file for each agent.
-- **Standalone mode:** `agent-tree run --closer anthropic/claude-…` for CI or
-  headless use. Here the closer is Claude via the API, and approval happens
-  interactively or through a separate `approve` step.
+The repo is set up so that each piece can be pulled in on its own:
 
+| Component | Where | How people get it |
+|---|---|---|
+| Engine CLI | `src/` → `dist/cli.js`, npm package `graftree-agent` (bin `graftree`) | `npx -y graftree-agent`, `npm i -g graftree-agent`, or `npm i -g github:oum353/agent-tree` |
+| Library | `graftree-agent` exports (schema, store, plan checks, workers) | `import … from "graftree-agent"` |
+| JSON Schemas | `schema/{plan,run,config}.schema.json` (generated from zod) | In the package, or straight from GitHub |
+| Claude Code skill | `plugins/graftree/skills/graftree/` | `/plugin marketplace add oum353/agent-tree` → `/plugin install graftree@graftree` |
+| Skill for other agents | The same folder (standard `SKILL.md`) | Copy it in, `cmd --skill <dir>`, or use the AGENTS.md snippet in `integrations/` |
+
+The engine is written in TypeScript, which means Node ≥ 20. Every supported
+CLI agent already needs Node, and the dependencies are only `zod` and `yaml`.
 ---
 
 ## 7. Safety and budgets
@@ -307,9 +325,11 @@ Claude Code skill, and the report.
 others), a live tree viewer, cost-aware worker routing, and a benchmark harness
 (e.g. SWE-bench-style tasks) that measures accuracy against single-agent baselines.
 
-## 9. Open questions
+## 9. Decisions made
 
-1. Engine language: Python (proposed) or TypeScript.
-2. Package and skill name: `agent-tree`?
-3. Default worker set for the first public release, i.e. which models ship in the
-   example config.
+- Name: **graftree**. Grafting joins branches into one tree, which is the merge
+  step. The npm package is `graftree-agent`.
+- Language: TypeScript. Node is already present wherever the CLI agents run, and
+  the typed schema is the protocol.
+- First external worker: CommandCode with `deepseek/deepseek-v4.1-flash`.
+- License: MIT.

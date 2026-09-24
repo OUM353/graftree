@@ -1,0 +1,63 @@
+# graftree configuration — https://github.com/oum353/agent-tree
+# Schema: `graftree schema config`
+version: 1
+
+# Workers: models/agents that can fill roles. API keys are never stored here;
+# reference environment variables instead.
+workers:
+  # CommandCode running DeepSeek V4.1 Flash in headless mode.
+  # Install: npm i -g command-code   then: cmd login
+  # --yolo is intended: every attempt runs in a throwaway git worktree and the
+  # engine checks the resulting diff before accepting anything.
+  cc-deepseek-flash:
+    type: cli
+    command: [cmd, -p, "{prompt}", -m, "{model}", --output-format, json,
+              --max-turns, "80", --yolo, --trust, --no-session,
+              --skip-onboarding, --no-auto-update]
+    model: deepseek/deepseek-v4.1-flash
+    output: ndjson
+    timeoutSec: 1800
+
+  # OpenRouter (any model id from https://openrouter.ai/models).
+  # export OPENROUTER_API_KEY=...
+  # openrouter-deepseek:
+  #   type: openai-compatible
+  #   baseUrl: https://openrouter.ai/api/v1
+  #   apiKeyEnv: OPENROUTER_API_KEY
+  #   model: deepseek/<model-id>
+
+  # OpenCode headless.
+  # opencode:
+  #   type: cli
+  #   command: [opencode, run, --model, "{model}", "{prompt}"]
+  #   model: <provider/model>
+
+  # Local model via Ollama's OpenAI-compatible endpoint.
+  # ollama:
+  #   type: openai-compatible
+  #   baseUrl: http://localhost:11434/v1
+  #   model: qwen3-coder
+
+# Roles -> workers. "closer" means the root agent driving graftree does it
+# itself. The closer ALWAYS makes the final decisions (selection, merge
+# sign-off). That is not configurable. Several workers in a list are used
+# round-robin across attempts; mixing models improves accuracy.
+roles:
+  planner: [closer]
+  test_writer: [closer]
+  solver: [cc-deepseek-flash]
+  integrator: [closer]
+  reviewer: [cc-deepseek-flash]
+
+budgets:
+  # attemptsPerLeaf: 3        # default comes from the tier
+  maxRepairRounds: 2
+  maxRedecompositions: 1
+  maxWallMinutes: 240
+  concurrency: 3
+
+# Repo-wide checks used as regression gates (optional).
+commands:
+  # test: npm test
+  # build: npm run build
+  # lint: npm run lint

@@ -1,0 +1,64 @@
+{
+  "name": "graftree-agent",
+  "version": "0.1.0",
+  "description": "Tree-structured, test-first, multi-model coding agent engine: decompose hard problems, solve in isolated worktrees across models, merge verified results into one best answer.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "graftree": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema/*.json": "./schema/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "templates",
+    "plugins",
+    "README.md",
+    "DESIGN.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "schema": "tsx scripts/gen-schema.ts",
+    "check": "npm run typecheck && npm test"
+  },
+  "keywords": [
+    "agent",
+    "coding-agent",
+    "tree-of-thought",
+    "multi-agent",
+    "claude-code",
+    "skill",
+    "openrouter",
+    "commandcode",
+    "llm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oum353/agent-tree.git"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}
