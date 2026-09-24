@@ -11,7 +11,7 @@
       "name": "graftree",
       "source": "./plugins/graftree",
       "description": "Solve hard coding problems accurately: decompose into a tree, test-first, redundant multi-model attempts, verified merges. The invoking agent stays the final decision-maker.",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "license": "MIT",
       "keywords": ["agent", "tree", "multi-model", "test-first", "orchestration"]
     }

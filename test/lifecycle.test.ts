@@ -160,3 +160,25 @@ test("API workers can plan through the tool loop", async () => {
     globalThis.fetch = realFetch;
   }
 });
+
+test("a new plan's drafted tests replace the previous plan's", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, existsSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = tempRepo();
+  const store = new Store(root);
+  const run = await newRun(store, "p");
+  const draft = (file: string) => {
+    const d = mkdtempSync(join(tmpdir(), "gt-draft-"));
+    mkdirSync(join(d, file, ".."), { recursive: true });
+    writeFileSync(join(d, file), "// t\n");
+    return d;
+  };
+  const plan = (file: string) => ({ tier: "focused", summary: "s", nodes: [{ id: "a", parent: null, kind: "leaf", goal: "g", ownedPaths: ["src/**"], acceptance: { files: [file], command: "true" } }] });
+  await submitPlan(store, run, plan("test/old.test.ts"), { testsFrom: draft("test/old.test.ts") });
+  await rejectRun(store, await store.loadRun(run.id), "redo");
+  const check = await submitPlan(store, await store.loadRun(run.id), plan("test/new.test.ts"), { testsFrom: draft("test/new.test.ts") });
+  assert.deepEqual(check.errors, []);
+  assert.equal(existsSync(join(store.testsDir(run.id), "test/old.test.ts")), false);
+  assert.equal(existsSync(join(store.testsDir(run.id), "test/new.test.ts")), true);
+});

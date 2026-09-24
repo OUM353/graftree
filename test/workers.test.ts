@@ -94,7 +94,13 @@ test("a failed result event marks the worker run as not ok", async () => {
 test("normalizeUsage understands CommandCode, Claude and OpenAI shapes", async () => {
   const { normalizeUsage } = await import("../src/usage.js");
   assert.deepEqual(normalizeUsage({ inputTokens: 5, outputTokens: 2, cacheReadTokens: 1 }), { inputTokens: 5, outputTokens: 2, cacheReadTokens: 1 });
-  assert.deepEqual(normalizeUsage({ input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 3 }), { inputTokens: 5, outputTokens: 2, cacheReadTokens: 3 });
+  // Claude counts cache reads and writes outside input_tokens; graftree's input includes them.
+  assert.deepEqual(normalizeUsage({ input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 3 }), { inputTokens: 8, outputTokens: 2, cacheReadTokens: 3 });
+  // Shape captured from `claude -p --output-format json` (Claude Code 2.1).
+  assert.deepEqual(
+    normalizeUsage({ input_tokens: 10, cache_creation_input_tokens: 5124, cache_read_input_tokens: 23422, output_tokens: 46 }),
+    { inputTokens: 28556, outputTokens: 46, cacheReadTokens: 23422 },
+  );
   assert.deepEqual(normalizeUsage({ prompt_tokens: 5, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 4 } }), { inputTokens: 5, outputTokens: 2, cacheReadTokens: 4 });
   assert.deepEqual(normalizeUsage(undefined), { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 });
 });

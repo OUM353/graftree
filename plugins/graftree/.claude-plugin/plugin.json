@@ -1,12 +1,12 @@
 {
   "name": "graftree",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Solve hard coding problems accurately: decompose into a tree, test-first, redundant multi-model attempts, verified merges. The invoking agent stays the final decision-maker.",
   "author": {
     "name": "oum353"
   },
-  "homepage": "https://github.com/oum353/agent-tree",
-  "repository": "https://github.com/oum353/agent-tree",
+  "homepage": "https://github.com/oum353/graftree",
+  "repository": "https://github.com/oum353/graftree",
   "license": "MIT",
   "keywords": ["agent", "tree", "multi-model", "test-first", "orchestration"]
 }

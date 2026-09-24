@@ -1,3 +1,4 @@
+import { effectiveDeps } from "./plan.js";
 import { z } from "zod";
 import { Plan, TIER_DEFAULTS, type NodeState, type Run } from "./schema.js";
 
@@ -44,6 +45,11 @@ ${tiers}
    conventions. Only if a goal cannot be tested, add a rubric.
 6. acceptance.command runs from the repo root and must exit 0 only when that
    node's tests pass.
+7. Dependencies. Siblings are solved in parallel from the original code, so a
+   node's tests may only use its own code, test doubles, and the code of the
+   siblings listed in its dependsOn. A node with dependsOn waits until those
+   siblings are solved, then starts from their verified code. Use dependsOn only
+   where the tests really need a sibling's implementation: it serializes work.
 
 ## Output (required)
 
@@ -73,6 +79,10 @@ const bullet = (xs: string[]) => (xs.length ? xs.map((x) => `- ${x}`).join("\n")
 function nodeBrief(run: Run, node: NodeState): string {
   const siblings = Object.values(run.nodes).filter((n) => n.parent === node.parent && n.id !== node.id);
   const consumed = siblings.filter((s) => node.dependsOn.includes(s.id) || s.contract.exposes.some((e) => node.contract.consumes.some((c) => e.includes(c))));
+  const deps = effectiveDeps(run, node);
+  const provided = deps.length
+    ? `\nAlready built and verified (their code is in your working tree; use it as is, do not modify it):\n${deps.map((d) => `- ${d.id}: ${d.goal}`).join("\n")}\n`
+    : "";
   return `## Overall problem
 
 ${run.problem}
@@ -84,9 +94,9 @@ Goal: ${node.goal}
 Interfaces you must PROVIDE (exactly):
 ${bullet(node.contract.exposes)}
 
-Interfaces you CONSUME (code against these; siblings are building them in parallel):
+Interfaces you CONSUME (code against these${deps.length ? "" : "; siblings are building them in parallel"}):
 ${bullet(node.contract.consumes)}
-${consumed.length ? `\nSibling contracts you rely on:\n${consumed.map((s) => `- ${s.id}: ${s.contract.exposes.join("; ") || s.goal}`).join("\n")}\n` : ""}
+${provided}${consumed.length ? `\nSibling contracts you rely on:\n${consumed.map((s) => `- ${s.id}: ${s.contract.exposes.join("; ") || s.goal}`).join("\n")}\n` : ""}
 You may ONLY modify files matching:
 ${bullet(node.ownedPaths)}
 

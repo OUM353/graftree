@@ -3,26 +3,14 @@ import { cp, mkdir, open, readFile, readdir, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { getWorker, loadConfig } from "./config.js";
 import { runShell, tail, writeLog } from "./exec.js";
-import {
-  addBranchWorktree,
-  addDetachedWorktree,
-  changedFiles,
-  commitOverlay,
-  commitAll,
-  diffStat,
-  diffText,
-  git,
-  isAncestor,
-  mergeCommit,
-  removeWorktree,
-  resetWorktree,
-} from "./git.js";
+import { addBranchWorktree, addDetachedWorktree, changedFiles, commitAll, commitOverlay, diffStat, diffText, git, isAncestor, mergeCommit, removeWorktree, resetWorktree } from "./git.js";
 import { matchesAny } from "./glob.js";
+import { effectiveDeps } from "./plan.js";
 import { checkLocked } from "./lifecycle.js";
 import { integratorPrompt, repairPrompt, reviewerPrompt, solverPrompt } from "./prompts.js";
 import { CLOSER, TIER_DEFAULTS, type Attempt, type CheckResult, type Config, type NodeState, type Run, type RunStatus } from "./schema.js";
 import { logEvent, type Store } from "./store.js";
-import { addUsage, recordedWarnings, runUsage, usageWarnings } from "./usage.js";
+import { addUsage, recordedWarnings, runUsage, sumUsage, usageWarnings } from "./usage.js";
 import { GraftreeError, normalizeRepoPath, now, sha256File } from "./util.js";
 import { runWorker } from "./workers/index.js";
 
@@ -102,6 +90,16 @@ const ancestorsOf = (run: Run, id: string): NodeState[] => {
   return out;
 };
 const rootOf = (run: Run) => Object.values(run.nodes).find((n) => n.parent === null)!;
+
+const depsDone = (run: Run, node: NodeState) => effectiveDeps(run, node).every((d) => d.status === "done" && d.winner !== null);
+
+/** Nodes that start from this node's code: dependents of it or of its ancestors, and their subtrees. */
+function dependentsOf(run: Run, id: string): NodeState[] {
+  const direct = Object.values(run.nodes).filter((n) => n.id !== id && effectiveDeps(run, n).some((d) => d.id === id));
+  const out = new Map<string, NodeState>();
+  for (const d of direct) for (const n of [d, ...descendantsOf(run, d.id)]) out.set(n.id, n);
+  return [...out.values()];
+}
 
 function attemptsPerLeaf(c: Ctx): number {
   return c.cfg.budgets.attemptsPerLeaf ?? TIER_DEFAULTS[c.run.plan!.tier].attemptsPerLeaf;
@@ -480,7 +478,7 @@ async function settleNode(c: Ctx, node: NodeState): Promise<void> {
  * that now fail go through the normal repair loop.
  */
 async function regateLeaf(c: Ctx, node: NodeState): Promise<void> {
-  const newBase = c.run.approval!.baseCommit;
+  const newBase = await leafBase(c, node);
   node.base = newBase;
   c.say(`  ${node.id}: re-verifying ${node.attempts.length} attempt(s) against hardened tests`);
   for (const a of node.attempts) {
@@ -506,9 +504,30 @@ async function regateLeaf(c: Ctx, node: NodeState): Promise<void> {
   node.regate = false;
 }
 
+/** A leaf starts from the run base plus the winning code of everything it depends on. */
+async function leafBase(c: Ctx, node: NodeState): Promise<string> {
+  const runBase = c.run.approval!.baseCommit;
+  const deps = effectiveDeps(c.run, node);
+  if (!deps.length) return runBase;
+  const wt = wtPath(c, node.id, "_base");
+  await c.gitLock.use(() => addBranchWorktree(c.store.root, wt, branchName(c, node.id, "base"), runBase));
+  try {
+    for (const d of deps) {
+      const win = d.attempts.find((a) => a.n === d.winner);
+      if (!win?.commit) throw new GraftreeError(`dependency ${d.id} of ${node.id} has no winner yet`, "bad_status");
+      if (!(await mergeCommit(wt, win.commit, `graftree ${c.run.id}: ${d.id} a${win.n} as the base of ${node.id}`))) {
+        throw new GraftreeError(`could not merge dependency ${d.id} into the base of ${node.id}; check ownership overlap`, "merge");
+      }
+    }
+    return await git(wt, ["rev-parse", "HEAD"]);
+  } finally {
+    await removeWorktree(c.store.root, wt);
+  }
+}
+
 async function solveLeaf(c: Ctx, node: NodeState): Promise<void> {
   node.status = "solving";
-  node.base ??= c.run.approval!.baseCommit;
+  node.base ??= await leafBase(c, node);
   if (node.regate) await regateLeaf(c, node);
   node.targetAttempts ??= attemptsPerLeaf(c);
   const pool = c.cfg.roles.solver;
@@ -666,6 +685,8 @@ export async function runTree(store: Store, runId: string | undefined, opts: Run
     for (;;) {
       const ready = Object.values(run.nodes).filter((n) => {
         if (!["planned", "solving", "integrating"].includes(n.status)) return false;
+        // A node that depends on siblings waits for their winners, then starts from their code.
+        if (!depsDone(run, n)) return false;
         return n.kind === "leaf" || childrenOf(run, n.id).every((k) => k.status === "done");
       });
       checkUsage(c);
@@ -702,6 +723,22 @@ export async function resetAncestors(store: Store, run: Run, id: string): Promis
   }
 }
 
+/**
+ * A node's winner changed, so everything built on top of its old code is stale:
+ * dependents (and their subtrees) start over from the new code. Their cost stays
+ * on the books as run overhead.
+ */
+async function resetDependents(store: Store, run: Run, id: string): Promise<void> {
+  for (const d of dependentsOf(run, id)) {
+    if (!d.attempts.length && !d.base) continue;
+    for (const a of d.attempts) if (a.worktree) await removeWorktree(store.root, a.worktree);
+    run.overheadUsage = sumUsage([run.overheadUsage, ...d.attempts.map((a) => a.usage)]);
+    Object.assign(d, { status: "planned", base: null, attempts: [], recommended: null, winner: null, decidedBy: null, awaiting: undefined, regate: false, targetAttempts: null });
+    logEvent(run, "reopened", `${d.id} (dependency ${id} changed)`);
+    await resetAncestors(store, run, d.id);
+  }
+}
+
 /** The closer's selection. Only a passing attempt can win: the bar is never lowered. */
 export async function decide(store: Store, runId: string | undefined, nodeId: string, n: number, notes?: string, by = "closer"): Promise<Run> {
   const id = (await store.loadRun(runId)).id;
@@ -719,7 +756,10 @@ export async function decide(store: Store, runId: string | undefined, nodeId: st
     node.decisionNotes = notes;
     node.status = "done";
     node.awaiting = undefined;
-    if (changed) await resetAncestors(store, run, nodeId);
+    if (changed) {
+      await resetAncestors(store, run, nodeId);
+      await resetDependents(store, run, nodeId);
+    }
     logEvent(run, "decided", `${nodeId} a${n}${notes ? `: ${notes}` : ""}`);
     run.status = rootOf(run).status === "done" ? "ready_to_close" : "solving";
     await store.saveRun(run);
@@ -768,7 +808,12 @@ export async function addExternalAttempt(
     const node = run.nodes[nodeId];
     if (!node) throw new GraftreeError(`unknown node "${nodeId}"`, "invalid");
     if (!run.approval) throw new GraftreeError("run is not approved", "bad_status");
-    node.base ??= node.kind === "leaf" ? run.approval.baseCommit : null;
+    if (node.kind === "leaf" && !node.base) {
+      if (!depsDone(run, node)) {
+        throw new GraftreeError(`${nodeId} depends on ${effectiveDeps(run, node).map((d) => d.id).join(", ")}; decide those first`, "bad_status");
+      }
+      node.base = await leafBase(c, node);
+    }
     if (!node.base) throw new GraftreeError(`split ${nodeId} has no merged base yet; run \`graftree run\` first`, "bad_status");
 
     let commit = src.commit ? await git(store.root, ["rev-parse", "--verify", `${src.commit}^{commit}`]) : undefined;

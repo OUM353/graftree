@@ -254,4 +254,16 @@ export function renderPlanMarkdown(run, cfg) {
     md.push("```", `graftree approve ${run.id}            # lock tests, allow solving`, `graftree reject ${run.id} --notes "…"  # ${pending ? "drop the proposal and resume" : "send back for replanning"}`, "```", "");
     return md.join("\n");
 }
+/**
+ * Siblings this node, or any of its ancestors, depends on. Their winning code
+ * is where the node's leaves start, so tests may use the real implementation.
+ */
+export function effectiveDeps(run, node) {
+    const ids = new Set();
+    for (let cur = node; cur; cur = cur.parent ? run.nodes[cur.parent] : undefined) {
+        for (const d of cur.dependsOn)
+            ids.add(d);
+    }
+    return [...ids].map((id) => run.nodes[id]).filter((n) => !!n);
+}
 //# sourceMappingURL=plan.js.map

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { getWorker, loadConfig } from "./config.js";
 import { addDetachedWorktree, changedFiles, commitOverlay, git, headCommit, removeWorktree } from "./git.js";
 import { allAcceptanceFiles, checkPlan, nodesFromPlan, renderPlanMarkdown, type PlanCheck } from "./plan.js";
@@ -47,8 +47,10 @@ export async function submitPlan(
 ): Promise<PlanCheck> {
   requireStatus(run, PLANNABLE, "plan");
   const testsDir = store.testsDir(run.id);
-  if (opts.testsFrom) {
+  if (opts.testsFrom && resolve(opts.testsFrom) !== resolve(testsDir)) {
     if (!existsSync(opts.testsFrom)) throw new GraftreeError(`tests dir not found: ${opts.testsFrom}`, "invalid");
+    // A new set of drafted tests replaces the previous one, so a rejected plan's tests don't linger.
+    await rm(testsDir, { recursive: true, force: true });
     await mkdir(testsDir, { recursive: true });
     await cp(opts.testsFrom, testsDir, { recursive: true });
   }
@@ -101,8 +103,10 @@ export async function planWithWorker(store: Store, run: Run, workerName: string)
       return { plan: null, errors: [`plan.json is not valid JSON: ${(e as Error).message}`], warnings: [], worker: result };
     }
     const testsOut = join(wt, PLANNER_OUT_DIR, "tests");
+    // The worker's tests (or none) replace any drafted by an earlier planner.
+    if (!existsSync(testsOut)) await mkdir(testsOut, { recursive: true });
     const check = await submitPlan(store, run, planJson, {
-      testsFrom: existsSync(testsOut) ? testsOut : undefined,
+      testsFrom: testsOut,
       author: workerName,
     });
     return { ...check, worker: result };

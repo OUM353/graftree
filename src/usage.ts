@@ -14,8 +14,11 @@ export function normalizeUsage(u: unknown): { inputTokens: number; outputTokens:
   if (!u || typeof u !== "object") return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
   const o = u as Record<string, unknown>;
   const details = (o.prompt_tokens_details ?? {}) as Record<string, unknown>;
+  // Claude reports cache reads/writes outside input_tokens; count them, as CommandCode
+  // and OpenAI-style usage already do, so "input" means the same thing everywhere.
+  const claudeCached = typeof o.input_tokens === "number" ? num(o, "cache_read_input_tokens") + num(o, "cache_creation_input_tokens") : 0;
   return {
-    inputTokens: num(o, "inputTokens", "input_tokens", "prompt_tokens"),
+    inputTokens: num(o, "inputTokens", "input_tokens", "prompt_tokens") + claudeCached,
     outputTokens: num(o, "outputTokens", "output_tokens", "completion_tokens"),
     cacheReadTokens: num(o, "cacheReadTokens", "cache_read_input_tokens") || num(details, "cached_tokens"),
   };

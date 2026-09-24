@@ -1,5 +1,5 @@
 {
-  "$id": "https://github.com/oum353/agent-tree/schema/plan.schema.json",
+  "$id": "https://github.com/oum353/graftree/schema/plan.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {

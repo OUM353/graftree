@@ -177,8 +177,13 @@ touches a locked file, the candidate is disqualified automatically.
 
 - Each attempt runs in its own **git worktree** branched from the node's base.
 - Leaves with no dependencies run in parallel, up to a concurrency limit.
-- A leaf that depends on a sibling's interface codes against the **contract**, using
-  stubs generated from the contract, so it doesn't have to wait.
+- A leaf that only needs a sibling's interface codes against the **contract** and
+  tests with a double, so it doesn't have to wait.
+- A node with `dependsOn` (its own, or an ancestor's) waits for those siblings'
+  winners and starts from the run base merged with their code. Its gates still
+  measure only its own diff against that base. If a dependency's winner changes,
+  its dependents start over. (Added in v0.4.1 after a live Opus plan gave a CLI
+  leaf tests that ran the real store and protocol.)
 
 ### 3.5 Verify and select (per node)
 
@@ -308,10 +313,10 @@ The repo is set up so that each piece can be pulled in on its own:
 
 | Component | Where | How people get it |
 |---|---|---|
-| Engine CLI | `src/` → `dist/cli.js`, npm package `graftree-agent` (bin `graftree`) | `npx -y graftree-agent`, `npm i -g graftree-agent`, or `npm i -g github:oum353/agent-tree` |
+| Engine CLI | `src/` → `dist/cli.js`, npm package `graftree-agent` (bin `graftree`) | `npx -y graftree-agent`, `npm i -g graftree-agent`, or `npm i -g https://codeload.github.com/oum353/graftree/tar.gz/refs/heads/main` |
 | Library | `graftree-agent` exports (schema, store, plan checks, workers) | `import … from "graftree-agent"` |
 | JSON Schemas | `schema/{plan,run,config}.schema.json` (generated from zod) | In the package, or straight from GitHub |
-| Claude Code skill | `plugins/graftree/skills/graftree/` | `/plugin marketplace add oum353/agent-tree` → `/plugin install graftree@graftree` |
+| Claude Code skill | `plugins/graftree/skills/graftree/` | `/plugin marketplace add oum353/graftree` → `/plugin install graftree@graftree` |
 | Skill for other agents | The same folder (standard `SKILL.md`) | Copy it in, `commandcode --skill <dir>`, or use the AGENTS.md snippet in `integrations/` |
 
 The engine is written in TypeScript, which means Node ≥ 20. Every supported
