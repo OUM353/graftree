@@ -1,4 +1,4 @@
-import type { Usage } from "./schema.js";
+import type { Config, Run, Usage } from "./schema.js";
 import type { WorkerResult } from "./workers/types.js";
 /**
  * Normalize token usage from any worker: CommandCode (inputTokens/outputTokens),
@@ -20,3 +20,15 @@ export declare function runUsage(run: {
     }>;
     overheadUsage?: Usage;
 }): Usage;
+export interface UsageWarning {
+    /** Stable id, so each threshold is reported once. */
+    key: string;
+    message: string;
+}
+/**
+ * Thresholds the run has crossed so far. Totals warn at each multiple of the
+ * threshold (1x, 2x, ...); a single attempt warns once.
+ */
+export declare function usageWarnings(run: Run, budgets: Config["budgets"]): UsageWarning[];
+/** Warnings already recorded in the run's history (what `run`, `show` and the report display). */
+export declare function recordedWarnings(run: Run): string[];

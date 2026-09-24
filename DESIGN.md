@@ -189,7 +189,11 @@ touches a locked file, the candidate is disqualified automatically.
    equal), and reviewer findings.
 3. **Tie-breaks and judgment calls go to the closer.** A worker model never makes
    the final pick.
-4. **No candidate passes:** repair the best near-miss (a bounded number of rounds,
+4. **Near-misses:** every failed (not disqualified) attempt is repaired with its
+   own budget, even when a sibling already passes, so the closer picks among as
+   many verified candidates as possible (`budgets.repairAll`, default on; off =
+   one node budget, stop at the first pass).
+   **No candidate passes:** repair the best near-miss (a bounded number of rounds,
    with the failure output fed back), then retry with fresh attempts, possibly on
    different models. If that also fails, re-decompose the node. If the budget is
    exhausted, escalate to the closer and the human with a diagnosis.
@@ -358,6 +362,46 @@ others), a live tree viewer, cost-aware worker routing, and a benchmark harness
   OpenAI-style APIs into calls, tokens in and out, cached tokens and time. It is
   recorded per attempt (plus planning overhead) and summed in `run`, `show` and
   the report.
+
+## 8c. Repair every near-miss (v0.4)
+
+The live hardening run showed the cost of stopping at the first pass: three
+parser attempts failed the new test, one was repaired, and the other two stayed
+failed, so the closer had one candidate instead of three. `budgets.repairAll`
+(default true) gives each failed attempt its own budget of
+`maxRepairRounds × (1 + hardenings of the node)` and repairs them in parallel
+under `budgets.concurrency`. Costs about one extra call per near-miss per round.
+
+## 8d. Re-decomposition (v0.4)
+
+A leaf that escalates may be too big rather than unlucky. `graftree redecompose`
+turns it into a split:
+
+- The node keeps its id, goal, `ownedPaths` and acceptance (including hardening
+  commands), so its locked tests still gate the merged children. The bar can
+  only rise.
+- New children bring new test files. Like hardening these are additive: they
+  are committed on top of the run base and locked.
+- The whole resulting plan is re-validated (ownership inside the parent,
+  disjoint siblings, tests drafted, depth). If the depth no longer fits, the
+  tier is raised to the smallest one that fits.
+- The proposal pauses the run at `awaiting_approval`, the same checkpoint as the
+  first plan. Nothing else can change the tree until the human approves or
+  rejects it. Rejecting restores the previous status.
+- On approval the leaf's attempts are retired (worktrees removed, usage moved
+  to run overhead so cost stays accurate) and ancestors re-integrate.
+- `budgets.maxRedecompositions` caps it per leaf (default 1).
+
+Only leaves can be re-decomposed. Restructuring a split means replanning the run.
+
+## 8e. Usage warnings (v0.4)
+
+After every worker call the engine compares usage with `budgets.warnTokens`,
+`warnCalls`, `warnAttemptTokens` and `warnWallPercent`. Each crossed threshold
+is logged once in the run history (totals again at each multiple), printed during
+`run`, returned in the summary's `warnings`, and listed in the report. Warnings
+don't stop the engine; the closer is expected to pause and ask the human. Hard
+token or dollar caps are still not enforced; only `maxWallMinutes` stops a run.
 
 ## 9. Decisions made
 

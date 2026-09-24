@@ -6,7 +6,7 @@ import { renderTree } from "./plan.js";
 import type { CheckResult, Config, Run } from "./schema.js";
 import { removeRunWorktrees } from "./solve.js";
 import { logEvent, type Store } from "./store.js";
-import { formatUsage, runUsage, sumUsage } from "./usage.js";
+import { formatUsage, recordedWarnings, runUsage, sumUsage } from "./usage.js";
 import { GraftreeError, now, writeFileAtomic } from "./util.js";
 
 export interface CloseResult {
@@ -115,7 +115,9 @@ async function renderReport(store: Store, run: Run, cfg: Config, checks: Record<
   }
   const total = runUsage(run);
   md.push("## Cost", "", `Total: ${formatUsage(total)}`);
-  if (run.overheadUsage) md.push(`Planning: ${formatUsage(run.overheadUsage)}`);
+  if (run.overheadUsage) md.push(`Planning and retired attempts: ${formatUsage(run.overheadUsage)}`);
+  const warnings = recordedWarnings(run);
+  if (warnings.length) md.push("", "Usage warnings raised during the run:", ...warnings.map((w) => `- ⚠ ${w}`));
   md.push("");
   md.push("## Workers", "", ...Object.entries(cfg.roles).map(([r, ws]) => `- ${r}: ${ws.join(", ")}`), "");
   if (run.final) {

@@ -56,8 +56,26 @@ export const Config = z.object({
         .object({
         attemptsPerLeaf: z.number().int().positive().optional(),
         maxRepairRounds: z.number().int().nonnegative().default(2),
+        /**
+         * true (default): every failed attempt gets its own repair budget, even
+         * after another attempt passes, so there are more verified candidates.
+         * false: one budget per node, and repairs stop at the first pass (cheaper).
+         */
+        repairAll: z.boolean().default(true),
         maxRedecompositions: z.number().int().nonnegative().default(1),
         maxWallMinutes: z.number().int().positive().default(240),
+        /**
+         * Usage warnings (0 disables one). They never stop a run; they tell the
+         * closer and the human that it is getting expensive, once per threshold.
+         * warnTokens: tokens in + out for the whole run (warns again at 2x, 3x, ...).
+         * warnCalls: worker calls for the whole run (also repeats at multiples).
+         * warnAttemptTokens: tokens for one attempt, including its repairs and reviews.
+         * warnWallPercent: share of maxWallMinutes used by one `graftree run`.
+         */
+        warnTokens: z.number().int().nonnegative().default(10_000_000),
+        warnCalls: z.number().int().nonnegative().default(100),
+        warnAttemptTokens: z.number().int().nonnegative().default(2_000_000),
+        warnWallPercent: z.number().int().min(0).max(100).default(80),
         concurrency: z.number().int().positive().default(3),
         /**
          * false (default): the closer picks every winner via `graftree decide`.
@@ -128,6 +146,15 @@ export const Plan = z.object({
     /** Why this decomposition (or why no split). Shown to the human at approval. */
     rationale: z.string().default(""),
     nodes: z.array(PlanNode).min(1),
+});
+/** Input to `graftree redecompose`: the new nodes under a leaf that could not be solved whole. */
+export const Subtree = z.object({
+    /** Why the node is split this way; shown at approval. */
+    rationale: z.string().min(1),
+    /** Paths only the integrator of the re-decomposed node may edit (glue). */
+    sharedPaths: z.array(z.string()).optional(),
+    /** New nodes; the direct children name the re-decomposed node as their parent. */
+    nodes: z.array(PlanNode).min(2),
 });
 // ---------------------------------------------------------------------------
 // Run state (tree.json) — the portable protocol between engine and closer
@@ -266,7 +293,35 @@ export const Run = z.object({
         baseCommit: z.string(),
     }))
         .default([]),
-    /** Worker calls not tied to an attempt (e.g. planning). */
+    /** Leaves split into subtrees after approval (each one approved by the human). */
+    redecompositions: z
+        .array(z.object({
+        at: z.string(),
+        node: z.string(),
+        reason: z.string(),
+        /** Ids of the nodes added under the re-decomposed node. */
+        nodes: z.array(z.string()),
+        /** New test files (additive, locked on approval). */
+        files: z.array(z.string()),
+        baseCommit: z.string(),
+    }))
+        .default([]),
+    /** A proposed re-decomposition waiting for the human (run status awaiting_approval). */
+    pendingRedecomposition: z
+        .object({
+        at: z.string(),
+        node: z.string(),
+        reason: z.string(),
+        /** The whole plan as it will be after approval. */
+        plan: Plan,
+        files: z.array(z.string()),
+        /** Staged test files, relative to the run dir. */
+        stagedTests: z.string(),
+        resumeStatus: RunStatus,
+    })
+        .nullable()
+        .default(null),
+    /** Worker calls not tied to an attempt (planning, attempts retired by re-decomposition). */
     overheadUsage: Usage.optional(),
     history: z.array(HistoryEntry).default([]),
 });

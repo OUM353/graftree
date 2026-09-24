@@ -22,7 +22,7 @@ import { checkLocked } from "./lifecycle.js";
 import { integratorPrompt, repairPrompt, reviewerPrompt, solverPrompt } from "./prompts.js";
 import { CLOSER, TIER_DEFAULTS, type Attempt, type CheckResult, type Config, type NodeState, type Run, type RunStatus } from "./schema.js";
 import { logEvent, type Store } from "./store.js";
-import { addUsage, runUsage } from "./usage.js";
+import { addUsage, recordedWarnings, runUsage, usageWarnings } from "./usage.js";
 import { GraftreeError, normalizeRepoPath, now, sha256File } from "./util.js";
 import { runWorker } from "./workers/index.js";
 
@@ -47,6 +47,8 @@ interface Ctx {
   sem: Semaphore;
   save: () => Promise<void>;
   say: (msg: string) => void;
+  /** The wall-clock warning fires at most once per `graftree run`. */
+  wallWarned?: boolean;
 }
 
 class Semaphore {
@@ -111,7 +113,13 @@ const engineWorkers = (names: string[]) => names.filter((n) => n !== CLOSER);
 // Run lock (one engine process per run)
 // ---------------------------------------------------------------------------
 
-async function withRunLock<T>(store: Store, runId: string, fn: () => Promise<T>): Promise<T> {
+/** While a re-decomposition waits for the human, nothing else may change the tree. */
+export function assertNoPending(run: Run): void {
+  const p = run.pendingRedecomposition;
+  if (p) throw new GraftreeError(`run ${run.id} has a re-decomposition of ${p.node} awaiting approval; \`graftree approve\` or \`graftree reject --notes …\` it first`, "bad_status");
+}
+
+export async function withRunLock<T>(store: Store, runId: string, fn: () => Promise<T>): Promise<T> {
   const lock = join(store.runDir(runId), ".lock");
   await mkdir(store.runDir(runId), { recursive: true });
   if (existsSync(lock)) {
@@ -241,10 +249,34 @@ async function prepareWorktree(c: Ctx, wt: string, branch: string | null, base: 
   }
 }
 
+/** Report newly crossed usage thresholds once each (recorded in history), and wall time once per `run`. */
+function checkUsage(c: Ctx): void {
+  const seen = new Set(c.run.history.filter((h) => h.event === "usage-warning").map((h) => h.detail?.split(" ")[0]));
+  const warnings = usageWarnings(c.run, c.cfg.budgets);
+  const b = c.cfg.budgets;
+  if (b.warnWallPercent > 0 && !c.wallWarned) {
+    const budgetMs = b.maxWallMinutes * 60_000;
+    const used = Date.now() - (c.deadline - budgetMs);
+    if (used >= (budgetMs * b.warnWallPercent) / 100) {
+      c.wallWarned = true;
+      warnings.push({
+        key: `wall:${new Date(c.deadline).toISOString()}`,
+        message: `this run has used ${Math.round(used / 60_000)} of its ${b.maxWallMinutes} min wall-clock budget (budgets.maxWallMinutes)`,
+      });
+    }
+  }
+  for (const w of warnings) {
+    if (seen.has(w.key)) continue;
+    logEvent(c.run, "usage-warning", `${w.key} ${w.message}`);
+    c.say(`⚠ ${w.message}`);
+  }
+}
+
 async function invokeWorker(c: Ctx, node: NodeState, a: Attempt, workerName: string, prompt: string, logFile: string): Promise<void> {
   const w = getWorker(c.cfg, workerName);
   const res = await runWorker(workerName, w, { prompt, cwd: a.worktree! });
   a.usage = addUsage(a.usage, res);
+  checkUsage(c);
   await writeLog(logPath(c, node.id, a.n, logFile), `${res.stdout}\n--- stderr ---\n${res.stderr}\n--- result ---\n${res.text}`);
   if (!res.ok) c.say(`  ${node.id}/a${a.n} ${workerName}: worker exited ${res.exitCode}${res.timedOut ? " (timed out)" : ""}`);
 }
@@ -284,46 +316,81 @@ async function runSolveAttempt(c: Ctx, node: NodeState, n: number, workerName: s
   await c.save();
 }
 
-/** Repair loop: feed failure output back to a worker in the same worktree. */
+/** One repair round on one attempt: feed its failure output back to a worker in the same worktree. */
+async function repairAttempt(c: Ctx, node: NodeState, a: Attempt, workerName: string): Promise<boolean> {
+  const isSplit = node.kind === "split";
+  const failure = await failureText(c, a);
+  a.repairs++;
+  a.status = "running";
+  await c.save();
+  c.say(`  ${node.id}/a${a.n}: repair ${a.repairs} by ${workerName}`);
+  try {
+    const allowed = isSplit ? [...node.sharedPaths, `${node.ownedPaths.join(", ")} (except paths owned by children)`] : node.ownedPaths;
+    const prompt = isSplit ? integratorPrompt(c.run, node, allowed, failure) : repairPrompt(c.run, node, failure);
+    await invokeWorker(c, node, a, workerName, prompt, `repair${a.repairs}.log`);
+    if (isSplit && a.worker === "merge") a.worker = workerName;
+    await snapshotAndGate(c, node, a, `graftree ${c.run.id} ${node.id} a${a.n} repair ${a.repairs} (${workerName})`);
+    // The code changed, so any earlier review no longer describes it.
+    a.review = undefined;
+    a.reviewVerdict = undefined;
+  } catch (e) {
+    a.status = "error";
+    a.notes = (e as Error).message;
+  }
+  c.say(`  ${node.id}/a${a.n}: ${a.status} after repair`);
+  await c.save();
+  // (status is reassigned inside awaited calls; widen so TS doesn't keep the "running" narrowing)
+  return (a.status as Attempt["status"]) === "passed";
+}
+
+/** Failed (not disqualified) attempts in engine-managed worktrees: the ones a repair can still fix. */
+function nearMisses(node: NodeState): Attempt[] {
+  return node.attempts
+    .filter((a) => a.status === "failed" && a.kind !== "external" && a.worktree && existsSync(a.worktree))
+    .sort((x, y) => x.repairs - y.repairs || (x.diffStat?.insertions ?? 0) - (y.diffStat?.insertions ?? 0));
+}
+
+/**
+ * Repair loop. Each hardening of this node grants a fresh budget: the bar
+ * moved, so fixing is expected.
+ *
+ * budgets.repairAll (default): every near-miss gets its own budget and is
+ * repaired in parallel, even when another attempt already passes, so the
+ * closer chooses among as many verified candidates as possible.
+ * Otherwise: one node-wide budget, spent on the best near-miss until the
+ * first attempt passes.
+ */
 async function repairNode(c: Ctx, node: NodeState): Promise<boolean> {
   const isSplit = node.kind === "split";
   const pool = engineWorkers(isSplit ? c.cfg.roles.integrator : c.cfg.roles.solver);
-  let rounds = node.attempts.reduce((s, a) => s + a.repairs, 0);
-  // Each hardening of this node grants a fresh repair budget: the bar moved, so fixing is expected.
   const hardenings = c.run.hardening.filter((h) => h.node === node.id).length;
   const budget = c.cfg.budgets.maxRepairRounds * (1 + hardenings);
+  const workerFor = (a: Attempt, round: number) =>
+    isSplit ? pool[round % Math.max(1, pool.length)] : a.worker !== CLOSER && a.worker !== "merge" ? a.worker : pool[0];
+
+  if (c.cfg.budgets.repairAll) {
+    const jobs = nearMisses(node)
+      .filter((a) => a.repairs < budget)
+      .map((a) =>
+        c.sem.use(async () => {
+          while (a.status === "failed" && a.repairs < budget && Date.now() < c.deadline) {
+            const w = workerFor(a, a.repairs);
+            if (!w || (await repairAttempt(c, node, a, w))) return;
+          }
+        }),
+      );
+    await Promise.all(jobs);
+    return node.attempts.some((a) => a.status === "passed");
+  }
+
+  let rounds = node.attempts.reduce((s, a) => s + a.repairs, 0);
   while (rounds < budget && Date.now() < c.deadline) {
-    // Best near-miss: failed (not disqualified), engine-managed worktree, fewest repairs, smallest diff.
-    const candidates = node.attempts
-      .filter((a) => a.status === "failed" && a.kind !== "external" && a.worktree && existsSync(a.worktree))
-      .sort((x, y) => x.repairs - y.repairs || (x.diffStat?.insertions ?? 0) - (y.diffStat?.insertions ?? 0));
-    const a = candidates[0];
+    const a = nearMisses(node)[0];
     if (!a) return false;
-    const workerName = isSplit ? pool[rounds % Math.max(1, pool.length)] : a.worker !== CLOSER && a.worker !== "merge" ? a.worker : pool[0];
-    if (!workerName) return false;
-    const failure = await failureText(c, a);
+    const w = workerFor(a, rounds);
+    if (!w) return false;
     rounds++;
-    a.repairs++;
-    a.status = "running";
-    await c.save();
-    c.say(`  ${node.id}/a${a.n}: repair ${a.repairs} by ${workerName}`);
-    try {
-      const allowed = isSplit ? [...node.sharedPaths, `${node.ownedPaths.join(", ")} (except paths owned by children)`] : node.ownedPaths;
-      const prompt = isSplit ? integratorPrompt(c.run, node, allowed, failure) : repairPrompt(c.run, node, failure);
-      await invokeWorker(c, node, a, workerName, prompt, `repair${a.repairs}.log`);
-      if (isSplit && a.worker === "merge") a.worker = workerName;
-      await snapshotAndGate(c, node, a, `graftree ${c.run.id} ${node.id} a${a.n} repair ${a.repairs} (${workerName})`);
-      // The code changed, so any earlier review no longer describes it.
-      a.review = undefined;
-      a.reviewVerdict = undefined;
-    } catch (e) {
-      a.status = "error";
-      a.notes = (e as Error).message;
-    }
-    c.say(`  ${node.id}/a${a.n}: ${a.status} after repair`);
-    await c.save();
-    // (status is reassigned inside awaited calls; widen so TS doesn't keep the "running" narrowing)
-    if ((a.status as Attempt["status"]) === "passed") return true;
+    if (await repairAttempt(c, node, a, w)) return true;
   }
   return false;
 }
@@ -364,6 +431,7 @@ async function reviewCandidates(c: Ctx, node: NodeState): Promise<void> {
     const siblings = await siblingFindings(c, node, a);
     const res = await runWorker(pick, getWorker(c.cfg, pick), { prompt: reviewerPrompt(c.run, node, tail(diff, 60_000), siblings), cwd: a.worktree });
     a.usage = addUsage(a.usage, res);
+    checkUsage(c);
     await resetWorktree(a.worktree);
     const file = logPath(c, node.id, a.n, "review.md");
     await writeLog(file, `# Review of ${node.id}/a${a.n} by ${pick}\n\n${res.ok ? res.text : `reviewer failed: ${res.stderr}`}\n`);
@@ -377,13 +445,16 @@ async function reviewCandidates(c: Ctx, node: NodeState): Promise<void> {
 
 /** After attempts: rank, review, then either auto-select or hand the decision to the closer. */
 async function settleNode(c: Ctx, node: NodeState): Promise<void> {
-  let passed = node.attempts.filter((a) => a.status === "passed");
-  if (!passed.length && (await repairNode(c, node))) passed = node.attempts.filter((a) => a.status === "passed");
+  if (c.cfg.budgets.repairAll || !node.attempts.some((a) => a.status === "passed")) await repairNode(c, node);
+  const passed = node.attempts.filter((a) => a.status === "passed");
   if (!passed.length) {
     node.status = "escalated";
     const tried = node.attempts.map((a) => `a${a.n}:${a.worker}:${a.status}`).join(", ") || "none";
-    const kinds = node.kind === "split" ? "fix the integration worktree and submit it with `graftree attempt`" : "`graftree retry` for fresh attempts, submit your own with `graftree attempt`";
-    node.awaiting = `no attempt passed (${tried}); ${kinds}, or reject and replan`;
+    const kinds =
+      node.kind === "split"
+        ? "fix the integration worktree and submit it with `graftree attempt`"
+        : "`graftree retry` for fresh attempts, submit your own with `graftree attempt`, or split it with `graftree redecompose`";
+    node.awaiting = `no attempt passed (${tried}); ${kinds}`;
     return;
   }
   await reviewCandidates(c, node);
@@ -526,6 +597,8 @@ export interface RunSummary {
   status: RunStatus;
   usage: ReturnType<typeof runUsage>;
   decisions: Decision[];
+  /** Usage warnings raised so far (high tokens, many calls, a runaway attempt, wall time). */
+  warnings: string[];
   next: string;
 }
 
@@ -551,11 +624,13 @@ export function summarize(run: Run): RunSummary {
     run.status === "ready_to_close"
       ? `graftree close ${run.id}`
       : decisions.length
-        ? `inspect with \`graftree diff ${run.id} <node> <attempt>\`, then \`graftree decide ${run.id} <node> <attempt>\` (or retry/attempt), then \`graftree run ${run.id}\``
-        : run.status === "done"
+        ? `inspect with \`graftree diff <node> <attempt> --run ${run.id}\`, then \`graftree decide <node> <attempt> --run ${run.id}\` (or retry/attempt/redecompose), then \`graftree run ${run.id}\``
+        : run.pendingRedecomposition
+          ? `review ${run.id}/plan.md, then \`graftree approve ${run.id}\` or \`graftree reject ${run.id} --notes "…"\``
+          : run.status === "done"
           ? `merge branch ${run.final?.branch}`
           : `graftree run ${run.id}`;
-  return { run: run.id, status: run.status, usage: runUsage(run), decisions, next };
+  return { run: run.id, status: run.status, usage: runUsage(run), decisions, warnings: recordedWarnings(run), next };
 }
 
 /**
@@ -567,6 +642,7 @@ export async function runTree(store: Store, runId: string | undefined, opts: Run
   const run0 = await store.loadRun(runId);
   return withRunLock(store, run0.id, async () => {
     const run = await store.loadRun(run0.id);
+    assertNoPending(run);
     if (!["approved", "solving", "awaiting_closer"].includes(run.status)) {
       if (run.status === "ready_to_close" || run.status === "done") return summarize(run);
       throw new GraftreeError(`run ${run.id} is "${run.status}"; it must be approved before solving`, "bad_status");
@@ -592,6 +668,7 @@ export async function runTree(store: Store, runId: string | undefined, opts: Run
         if (!["planned", "solving", "integrating"].includes(n.status)) return false;
         return n.kind === "leaf" || childrenOf(run, n.id).every((k) => k.status === "done");
       });
+      checkUsage(c);
       if (!ready.length || Date.now() > c.deadline) break;
       c.say(`▶ ${ready.map((n) => n.id).join(", ")}`);
       await Promise.all(ready.map((n) => (n.kind === "leaf" ? solveLeaf(c, n) : integrateSplit(c, n))));
@@ -617,7 +694,7 @@ export async function runTree(store: Store, runId: string | undefined, opts: Run
 }
 
 /** Reopen everything above a node whose winner changed; their merges are stale. */
-async function resetAncestors(store: Store, run: Run, id: string): Promise<void> {
+export async function resetAncestors(store: Store, run: Run, id: string): Promise<void> {
   for (const anc of ancestorsOf(run, id)) {
     for (const a of anc.attempts) if (a.worktree) await removeWorktree(store.root, a.worktree);
     if (anc.attempts.length || anc.base) logEvent(run, "reopened", `${anc.id} (child ${id} changed)`);
@@ -630,6 +707,7 @@ export async function decide(store: Store, runId: string | undefined, nodeId: st
   const id = (await store.loadRun(runId)).id;
   return withRunLock(store, id, async () => {
     const run = await store.loadRun(id);
+    assertNoPending(run);
     const node = run.nodes[nodeId];
     if (!node) throw new GraftreeError(`unknown node "${nodeId}"`, "invalid");
     const a = node.attempts.find((x) => x.n === n);
@@ -654,6 +732,7 @@ export async function retry(store: Store, runId: string | undefined, nodeId: str
   const id = (await store.loadRun(runId)).id;
   return withRunLock(store, id, async () => {
     const run = await store.loadRun(id);
+    assertNoPending(run);
     const node = run.nodes[nodeId];
     if (!node) throw new GraftreeError(`unknown node "${nodeId}"`, "invalid");
     if (node.kind !== "leaf") throw new GraftreeError(`retry applies to leaves; for split ${nodeId}, fix the integration and use \`graftree attempt\``, "invalid");
@@ -683,6 +762,7 @@ export async function addExternalAttempt(
   const id = (await store.loadRun(runId)).id;
   return withRunLock(store, id, async () => {
     const run = await store.loadRun(id);
+    assertNoPending(run);
     const cfg = await loadConfig(store.configPath);
     const c = makeCtx(store, run, cfg, {});
     const node = run.nodes[nodeId];
@@ -728,7 +808,7 @@ export async function addExternalAttempt(
   });
 }
 
-async function listFiles(dir: string, prefix = ""): Promise<string[]> {
+export async function listFiles(dir: string, prefix = ""): Promise<string[]> {
   const out: string[] = [];
   for (const e of await readdir(dir, { withFileTypes: true })) {
     const rel = prefix ? `${prefix}/${e.name}` : e.name;
@@ -758,6 +838,7 @@ export async function harden(store: Store, runId: string | undefined, nodeId: st
   const id = (await store.loadRun(runId)).id;
   return withRunLock(store, id, async () => {
     const run = await store.loadRun(id);
+    assertNoPending(run);
     if (!run.approval || !["approved", "solving", "awaiting_closer", "ready_to_close"].includes(run.status)) {
       throw new GraftreeError(`run ${id} is "${run.status}"; hardening needs an approved, unfinished run`, "bad_status");
     }

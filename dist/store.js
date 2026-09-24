@@ -62,6 +62,8 @@ export class Store {
             approval: null,
             final: null,
             hardening: [],
+            redecompositions: [],
+            pendingRedecomposition: null,
             history: [{ at: ts, event: "created" }],
         };
         await this.ensureGitignore();

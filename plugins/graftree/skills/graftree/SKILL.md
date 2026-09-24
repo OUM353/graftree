@@ -21,7 +21,7 @@ graftree --version || npx -y graftree-agent --version   # use whichever works as
 ```
 
 If neither works, tell the user to install it (`npm i -g graftree-agent`, or
-`npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/claude/stoic-einstein-6rjiws` before the npm release), then stop.
+`npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/main` before the npm release), then stop.
 
 ## Phase 0: Setup (once per repo)
 
@@ -109,8 +109,9 @@ The engine walks the tree bottom-up:
 - **Leaves:** it runs N attempts per leaf, each in its own worktree, spread
   round-robin across `roles.solver`. Every attempt goes through the gates:
   locked tests untouched, edits only inside `ownedPaths`, `commands.build` if set,
-  and the node's acceptance command. Failing near-misses get repair rounds with
-  their failure output. The top passing candidates are reviewed by
+  and the node's acceptance command. Every failing near-miss gets its own repair
+  rounds with its failure output, even after another attempt passes
+  (`budgets.repairAll: false` stops at the first pass instead). The top passing candidates are reviewed by
   `roles.reviewer` workers.
 - **Splits:** once all its children have winners, it merges them and gates the
   merge against the split's own tests plus every descendant's tests. If glue is
@@ -124,7 +125,7 @@ verdict. Handle every decision:
 | Situation | What you do |
 |---|---|
 | Passing candidates to choose from | Read the diffs of the top ones yourself (`$GT diff <node> <n> --run <run>`) and any review files, then `$GT decide <node> <n> --run <run> --notes "why"`. Prefer correct and clear over clever. The recommendation is only a hint |
-| `escalated`: nothing passed | Read the logs under `.graftree/runs/<run>/nodes/<node>/`. Then either run `$GT retry <node> --count N`, or solve it yourself (below). If the tests or the decomposition are wrong, stop, tell the user, and get approval before replanning |
+| `escalated`: nothing passed | Read the logs under `.graftree/runs/<run>/nodes/<node>/`. If attempts fail in scattered ways, run `$GT retry <node> --count N` or solve it yourself (below). If the leaf is too big to solve in one piece, re-decompose it (below). If the tests themselves are wrong, stop, tell the user, and get approval before replanning |
 | A closer slot (`roles.solver` includes `closer`) | Solve it with your own subagents in a worktree from the node base, then run `$GT attempt <node> --worktree <path> --run <run>` |
 | An integration needs glue (integrator is `closer`) | Edit the worktree named in `awaiting`, touching only the split's `sharedPaths` or parent paths no child owns. Then run `$GT attempt <node> --worktree <that path>` and `$GT decide` |
 
@@ -156,8 +157,45 @@ Hardening only adds files. It can never change or remove an approved test.
 Every hardening is listed in the report with its reason. Don't harden for
 style or speculative issues; for those, put them in the report.
 
+### Splitting a stuck leaf (re-decomposition)
+
+When a leaf escalates because it bundles separable problems (attempts get
+different parts right, or the failure logs point at distinct sub-problems),
+split it into a subtree instead of retrying the whole thing:
+
+1. Write `subtree.json` (schema: `$GT schema subtree`). The leaf becomes a split
+   and keeps its goal, `ownedPaths` and locked tests, so the bar does not drop.
+   Each child needs disjoint `ownedPaths` inside the leaf's, and its own new
+   tests at new repo paths, drafted in a scratch dir that mirrors repo paths.
+   Siblings solve independently, so a child's tests must not need code from
+   another child; the split's own (already locked) tests check them together.
+   Glue files go in `sharedPaths`.
+   ```
+   {"rationale": "…", "sharedPaths": ["src/parser/index.ts"],
+    "nodes": [{"id": "lexer", "parent": "<leaf>", "kind": "leaf", "goal": "…",
+               "ownedPaths": ["src/parser/lex/**"],
+               "acceptance": {"files": ["test/lex.test.ts"], "command": "…"}}, …]}
+   ```
+2. `$GT redecompose <leaf> --file subtree.json --tests <dir> --reason "<why whole-leaf attempts failed>" --run <run>`.
+   It validates the new tree, raises the tier if the extra depth needs it, and
+   pauses the run at `awaiting_approval`.
+3. **Show the user** `.graftree/runs/<run>/plan.md` (the proposal is at the
+   top) and wait. Then run `$GT approve <run>` or `$GT reject <run> --notes "…"`.
+   Rejecting resumes the run as it was.
+4. `$GT run <run>`. The leaf's old attempts are retired (their cost stays in the
+   report) and the new children are solved, integrated and gated like any others.
+
+Each leaf can be re-decomposed `budgets.maxRedecompositions` times (default 1).
+
 Cost so far appears in `run`/`show` output (`Cost so far: … calls, … in / … out`).
 Mention it when you summarize for the user.
+
+When `run` reports a usage warning (`⚠ high token usage`, `many worker calls`,
+an attempt over `warnAttemptTokens`, or most of the wall-clock budget used;
+in JSON, the `warnings` list), **stop and tell the user** before running more
+work: say what fired, the cost so far, and what is left. Continue only with
+their OK. An attempt over `warnAttemptTokens` often means an agent looping;
+read its logs before retrying it.
 
 ## Phase 5: Close
 
@@ -181,7 +219,7 @@ Fix it with an `attempt` on the root, then `decide`, then `close` again.
 
 ## Non-negotiables
 
-- Never skip the approval pause. Never edit locked acceptance tests after
+- Never skip the approval pause, for the first plan or for a re-decomposition. Never edit locked acceptance tests after
   approval. If a test is wrong, stop, explain why, and get approval for a replan.
 - Only an actual test run you saw counts as evidence, never a worker saying
   "tests pass".

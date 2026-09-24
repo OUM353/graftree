@@ -1,0 +1,10 @@
+{
+  "name": "kvstore",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A small in-memory key-value store.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

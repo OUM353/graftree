@@ -153,3 +153,10 @@ test("reviews continue until the top-ranked candidate has been reviewed", async 
   assert.equal(n2.attempts.filter((a) => a.review).length, 1);
   assert.equal(n2.attempts.find((a) => a.n === n2.recommended)!.reviewVerdict, "pass");
 });
+
+test("repairAll repairs a near-miss even when a sibling already passed", async () => {
+  const { store, runId } = await approvedRun(focusedPlan(), { solver: ["good", "fixer"], extra: "budgets:\n  attemptsPerLeaf: 2" });
+  await runTree(store, runId);
+  const node = (await store.loadRun(runId)).nodes.parser!;
+  assert.deepEqual(node.attempts.map((a) => `${a.worker}:${a.status}:${a.repairs}`), ["good:passed:0", "fixer:passed:1"]);
+});

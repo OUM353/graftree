@@ -173,7 +173,8 @@ export function renderTree(plan, label = (n) => `${n.id} [${n.kind}] ${n.goal}`)
 }
 /** Human-readable plan for the approval checkpoint. */
 export function renderPlanMarkdown(run, cfg) {
-    const plan = run.plan;
+    const pending = run.pendingRedecomposition;
+    const plan = pending?.plan ?? run.plan;
     if (!plan)
         return `# ${run.id}\n\nNo plan yet.\n`;
     const tier = TIER_DEFAULTS[plan.tier];
@@ -184,6 +185,15 @@ export function renderPlanMarkdown(run, cfg) {
     const md = [];
     md.push(`# graftree plan — ${run.id}`, "");
     md.push(`**Status:** ${run.status}  `, `**Tier:** ${plan.tier} (max depth ${tier.maxDepth}, ${attempts} attempts per leaf)`, "");
+    if (pending) {
+        const added = plan.nodes.filter((n) => !run.nodes[n.id]);
+        md.push(`## ⏸ Proposed re-decomposition of \`${pending.node}\``, "");
+        md.push(`**Why:** ${pending.reason}`, "");
+        md.push(`\`${pending.node}\` becomes a split. It keeps its goal, ownership and locked tests, so the bar does not drop;`, `its attempts so far are retired. New nodes: ${added.map((n) => `\`${n.id}\``).join(", ")}.`, "");
+        if (pending.files.length)
+            md.push(`New test files (locked on approval): ${pending.files.map((f) => `\`${f}\``).join(", ")}`, "");
+        md.push("The tree and node list below show the plan as it will be after approval.", "");
+    }
     md.push("## Problem", "", run.problem, "");
     md.push("## Summary", "", plan.summary, "");
     if (plan.rationale)
@@ -218,16 +228,30 @@ export function renderPlanMarkdown(run, cfg) {
     md.push(`- Solver runs: ${leaves.length} leaves × ${attempts} attempts = **${leaves.length * attempts}**`);
     md.push(`- Integrations: **${splits.length}**`);
     md.push(`- Reviews: **${splits.length + 1}** (one per merge + final)`);
-    md.push(`- Repair budget: up to ${cfg.budgets.maxRepairRounds} rounds per node; ${cfg.budgets.maxRedecompositions} re-decomposition(s)`, "");
+    const b = cfg.budgets;
+    const warn = [b.warnTokens && `${b.warnTokens.toLocaleString("en-US")} tokens`, b.warnCalls && `${b.warnCalls} calls`, b.warnAttemptTokens && `${b.warnAttemptTokens.toLocaleString("en-US")} tokens in one attempt`].filter(Boolean);
+    if (warn.length)
+        md.push(`- Usage warnings at: ${warn.join(", ")}`);
+    md.push(`- Repair budget: up to ${cfg.budgets.maxRepairRounds} rounds ${cfg.budgets.repairAll ? "per failed attempt" : "per node"}; up to ${cfg.budgets.maxRedecompositions} re-decomposition(s) per leaf`, "");
     if (run.feedback.length) {
         md.push("## Previous feedback", "");
         for (const f of run.feedback)
             md.push(`- ${f.at}: ${f.notes}`);
         md.push("");
     }
+    if (run.redecompositions.length) {
+        md.push("## Re-decompositions", "");
+        for (const r of run.redecompositions)
+            md.push(`- **${r.node}** → ${r.nodes.join(", ")} (${r.at}): ${r.reason}`);
+        md.push("");
+    }
+    if (run.status !== "awaiting_approval")
+        return md.join("\n");
     md.push("## Decision", "");
-    md.push("Nothing is spent on solving until this plan is approved. Acceptance tests are locked on approval.", "");
-    md.push("```", `graftree approve ${run.id}            # lock tests, allow solving`, `graftree reject ${run.id} --notes "…"  # send back for replanning`, "```", "");
+    md.push(pending
+        ? "Nothing is spent on the new subtree until this is approved. New tests are locked on approval; rejecting resumes the run as it was."
+        : "Nothing is spent on solving until this plan is approved. Acceptance tests are locked on approval.", "");
+    md.push("```", `graftree approve ${run.id}            # lock tests, allow solving`, `graftree reject ${run.id} --notes "…"  # ${pending ? "drop the proposal and resume" : "send back for replanning"}`, "```", "");
     return md.join("\n");
 }
 //# sourceMappingURL=plan.js.map
