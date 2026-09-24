@@ -1,0 +1,3 @@
+# Check out text files with LF on every OS, so docs and tests parse the same
+# everywhere (Windows core.autocrlf would otherwise turn them into CRLF).
+* text=auto eol=lf
