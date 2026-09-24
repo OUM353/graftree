@@ -7,7 +7,7 @@
       "id": "root",
       "parent": null,
       "kind": "split",
-      "goal": "evaluate(parse(text)) computes integer binary expressions with + - * /, and errors propagate correctly.",
+      "goal": "evaluate(parse(text)) computes non-negative integer binary expressions with + - * /, and errors propagate correctly.",
       "ownedPaths": ["src/**"],
       "acceptance": {
         "files": ["test/e2e.test.mjs"],
@@ -18,7 +18,7 @@
       "id": "parser",
       "parent": "root",
       "kind": "leaf",
-      "goal": "Parse 'a op b' (integers, optional surrounding/inner whitespace, op in + - * /) into an AST; reject anything else.",
+      "goal": "Parse 'a op b' (non-negative decimal integers with no sign, each a safe integer; optional surrounding/inner whitespace; op in + - * /) into an AST; reject anything else.",
       "contract": {
         "exposes": [
           "src/parser/index.mjs: export function parse(text: string): { op: '+' | '-' | '*' | '/', a: number, b: number }  // throws SyntaxError on invalid input"
