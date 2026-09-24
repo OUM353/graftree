@@ -94,30 +94,39 @@ function humanSummary(sum) {
     return lines.join("\n");
 }
 async function main(argv) {
-    const { values, positionals } = parseArgs({
-        args: argv,
-        allowPositionals: true,
-        options: {
-            json: { type: "boolean", default: false },
-            tier: { type: "string" },
-            file: { type: "string" },
-            tests: { type: "string" },
-            worker: { type: "string" },
-            notes: { type: "string" },
-            commit: { type: "string" },
-            run: { type: "string" },
-            worktree: { type: "string" },
-            count: { type: "string" },
-            "auto-select": { type: "boolean" },
-            "keep-worktrees": { type: "boolean", default: false },
-            command: { type: "string" },
-            reason: { type: "string" },
-            yes: { type: "boolean", default: false },
-            force: { type: "boolean", default: false },
-            help: { type: "boolean", short: "h", default: false },
-            version: { type: "boolean", short: "v", default: false },
-        },
-    });
+    let parsed;
+    try {
+        parsed = parseArgs({
+            args: argv,
+            allowPositionals: true,
+            options: {
+                json: { type: "boolean", default: false },
+                tier: { type: "string" },
+                file: { type: "string" },
+                tests: { type: "string" },
+                worker: { type: "string" },
+                notes: { type: "string" },
+                commit: { type: "string" },
+                run: { type: "string" },
+                worktree: { type: "string" },
+                count: { type: "string" },
+                "auto-select": { type: "boolean" },
+                "keep-worktrees": { type: "boolean", default: false },
+                command: { type: "string" },
+                reason: { type: "string" },
+                yes: { type: "boolean", default: false },
+                force: { type: "boolean", default: false },
+                help: { type: "boolean", short: "h", default: false },
+                version: { type: "boolean", short: "v", default: false },
+            },
+        });
+    }
+    catch (e) {
+        const pkg = JSON.parse(await readFile(join(PACKAGE_ROOT, "package.json"), "utf8"));
+        const m = /Unknown option '([^']+)'/.exec(e.message);
+        throw new GraftreeError(m ? `unknown option ${m[1]} for graftree ${pkg.version} (see graftree --help; an older install may lack newer commands)` : e.message, "invalid");
+    }
+    const { values, positionals } = parsed;
     const out = { json: values.json };
     const [cmd, ...rest] = positionals;
     if (values.version) {

@@ -102,7 +102,9 @@ function humanSummary(sum: RunSummary): string {
 }
 
 async function main(argv: string[]): Promise<number> {
-  const { values, positionals } = parseArgs({
+  let parsed;
+  try {
+    parsed = parseArgs({
     args: argv,
     allowPositionals: true,
     options: {
@@ -126,6 +128,15 @@ async function main(argv: string[]): Promise<number> {
       version: { type: "boolean", short: "v", default: false },
     },
   });
+  } catch (e) {
+    const pkg = JSON.parse(await readFile(join(PACKAGE_ROOT, "package.json"), "utf8")) as { version: string };
+    const m = /Unknown option '([^']+)'/.exec((e as Error).message);
+    throw new GraftreeError(
+      m ? `unknown option ${m[1]} for graftree ${pkg.version} (see graftree --help; an older install may lack newer commands)` : (e as Error).message,
+      "invalid",
+    );
+  }
+  const { values, positionals } = parsed;
   const out: Out = { json: values.json! };
   const [cmd, ...rest] = positionals;
 
