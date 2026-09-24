@@ -17,6 +17,15 @@ const repo = resolve(target);
 const holdout = fileURLToPath(new URL("./holdout", import.meta.url));
 let dir = repo;
 let scratch;
+const git = (args) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+if (git(["rev-parse", "--git-dir"]).status !== 0) {
+  console.error(`${repo} is not a git repository; pass the directory of the repo you ran graftree in (e.g. . from inside it)`);
+  process.exit(2);
+}
+if (ref && git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).status !== 0) {
+  console.error(`${ref} not found in ${repo}${/\/final$/.test(ref) ? " (it is created by `graftree close`; grade graftree/<run>/root/<attempt> before closing)" : ""}`);
+  process.exit(2);
+}
 if (ref) {
   scratch = mkdtempSync(join(tmpdir(), "kv-grade-"));
   dir = join(scratch, "wt");
