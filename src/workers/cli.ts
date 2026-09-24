@@ -19,26 +19,50 @@ export function renderArgv(template: string[], vars: Record<string, string>): st
 }
 
 /**
- * Extract the final answer from newline-delimited JSON events. Agent CLIs
- * differ in event shapes, so this looks for the last event carrying a
- * result-like field and falls back to raw stdout.
+ * Extract the final answer from newline-delimited JSON events.
+ *
+ * Known shapes, checked from the last event backwards:
+ * - CommandCode: `{"type":"result","subtype":"success"|…,"finalText":"…","usage":{…}}`
+ *   (also `{"type":"event","event":{"type":"run_end","result":{"finalText":"…"}}}`)
+ * - Claude Code `-p --output-format stream-json`: `{"type":"result","subtype":"success","is_error":false,"result":"…"}`
+ * - Generic: the last event with a string `result`/`text`/`output`/`content`/`message`.
+ * A result event reporting failure (non-"success" subtype or is_error) sets ok=false.
+ * With no recognizable event, the raw stdout is the text.
  */
-export function parseNdjson(stdout: string): { text: string; events: unknown[]; usage?: unknown } {
-  const events: unknown[] = [];
-  for (const line of stdout.split("\n")) {
+export function parseNdjson(stdout: string): { text: string; events: unknown[]; usage?: unknown; ok?: boolean } {
+  const events: Record<string, unknown>[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
     const t = line.trim();
     if (!t.startsWith("{")) continue;
     try {
-      events.push(JSON.parse(t));
+      const v = JSON.parse(t);
+      if (v && typeof v === "object") events.push(v as Record<string, unknown>);
     } catch {
       /* non-JSON noise */
     }
   }
+  const str = (v: unknown) => (typeof v === "string" && v.length ? v : undefined);
+  const obj = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : undefined);
+
   for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i] as Record<string, unknown>;
-    for (const key of ["result", "text", "output", "content", "message"]) {
-      const v = e[key];
-      if (typeof v === "string" && v.length) return { text: v, events, usage: e.usage };
+    const e = events[i]!;
+    if (e.type === "result") {
+      const failed = (typeof e.subtype === "string" && e.subtype !== "success") || e.is_error === true;
+      const text = str(e.finalText) ?? str(e.result) ?? str(obj(e.result)?.finalText) ?? str(e.error) ?? "";
+      return { text, events, usage: e.usage, ok: !failed };
+    }
+    const runEnd = obj(e.event);
+    if (runEnd?.type === "run_end") {
+      const r = obj(runEnd.result);
+      const text = str(r?.finalText);
+      if (text !== undefined) return { text, events, usage: r?.usage };
+    }
+  }
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    for (const key of ["finalText", "result", "text", "output", "content", "message"]) {
+      const v = str(e[key]);
+      if (v) return { text: v, events, usage: e.usage };
     }
   }
   return { text: stdout.trim(), events };
@@ -105,7 +129,7 @@ export async function runCliWorker(name: string, w: CliWorker, task: WorkerTask)
     const parsed = w.output === "ndjson" ? parseNdjson(stdout) : { text: stdout.trim() };
     return {
       worker: name,
-      ok: code === 0 && !timedOut,
+      ok: code === 0 && !timedOut && ("ok" in parsed ? parsed.ok !== false : true),
       exitCode: code,
       timedOut,
       text: parsed.text,

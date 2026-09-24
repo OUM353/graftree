@@ -55,12 +55,17 @@ The skill is a plain folder: [`plugins/graftree/skills/graftree/`](plugins/graft
 
 ```bash
 npm i -g graftree-agent               # after the npm release
-npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/claude/stoic-einstein-6rjiws   # from GitHub today (no git or build needed)
+# While the repo is private (uses your normal git login; dist/ is prebuilt, no build step):
+git clone -b claude/stoic-einstein-6rjiws https://github.com/OUM353/Agent-tree.git graftree-src
+cd graftree-src && npm pack && npm i -g graftree-agent-0.2.0.tgz
+
+# Once public:
+npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/claude/stoic-einstein-6rjiws
 npx -y graftree-agent --help          # no install
 ```
 
 This needs Node ≥ 20 and git. It works on Linux, macOS and Windows; CI runs on all three.
-Until the code is merged to `main` and published to npm, install from the branch tarball as shown.
+Until the code is merged to `main` and published to npm, install from the branch as shown.
 (`npm i -g github:…` git installs are unreliable: npm can drop files while extracting them.)
 
 ### The library
@@ -147,7 +152,7 @@ verdict. The closer decides which one wins.
 |---|---|
 | Engine, gates, repair, integration, close | Automated end-to-end tests using a scripted fake CLI agent |
 | API worker tool loop | Tests against a mocked OpenAI-compatible server |
-| CommandCode worker | Flags taken from `commandcode --help` (v1.65). **Its JSON output parsing still needs a live run** |
+| CommandCode worker | Headless flags from `commandcode --help` (v1.65). Output parsing tested against a real captured run (Windows, DeepSeek V4.1 Flash). A full solve through CommandCode has not been run yet |
 | OpenRouter | The request format is standard, but **no live call has been made yet** |
 
 ## Safety

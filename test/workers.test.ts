@@ -61,3 +61,32 @@ test("openai-compatible worker sends auth from env and reads content", async () 
   assert.equal(noKey.ok, false);
   assert.match(noKey.stderr, /GT_TEST_KEY/);
 });
+
+test("parses real CommandCode v1.65 `-p --output-format json` output (captured on Windows)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const raw = readFileSync("test/fixtures/commandcode-v1.65-print-json.ndjson", "utf8").replace(/\n/g, "\r\n");
+  const r = parseNdjson(raw);
+  assert.equal(r.text, "GRAFTREE OK");
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.usage, { inputTokens: 17962, outputTokens: 5, cacheReadTokens: 8960, cacheWriteTokens: 0 });
+  // Without the final result line, the run_end event still yields the answer.
+  const noResult = raw.split("\r\n").filter((l) => !l.startsWith('{"type":"result"')).join("\n");
+  assert.equal(parseNdjson(noResult).text, "GRAFTREE OK");
+});
+
+test("a failed result event marks the worker run as not ok", async () => {
+  const r = parseNdjson('{"type":"result","subtype":"error_max_turns","finalText":""}');
+  assert.equal(r.ok, false);
+  const claude = parseNdjson('{"type":"result","subtype":"success","is_error":false,"result":"done"}');
+  assert.equal(claude.text, "done");
+  assert.equal(claude.ok, true);
+  const w = CliWorker.parse({
+    type: "cli",
+    command: [process.execPath, "-e", 'console.log(JSON.stringify({type:"result",subtype:"error_during_execution",finalText:"boom"}))'],
+    output: "ndjson",
+  });
+  const res = await runCliWorker("x", w, { prompt: "", cwd: tmpdir() });
+  assert.equal(res.exitCode, 0);
+  assert.equal(res.ok, false);
+  assert.equal(res.text, "boom");
+});
