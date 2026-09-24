@@ -3,9 +3,12 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { checkPlan } from "../src/plan.js";
 
+// Windows checkouts may have CRLF line endings (core.autocrlf); parse either.
+const readText = (p: string) => readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+
 // Keep documentation examples honest: every JSON plan in the skill's reference must validate.
 test("plan examples in the skill reference are valid", () => {
-  const md = readFileSync("plugins/graftree/skills/graftree/references/plan-format.md", "utf8");
+  const md = readText("plugins/graftree/skills/graftree/references/plan-format.md");
   const blocks = [...md.matchAll(/```json\n([\s\S]*?)```/g)].map((m) => m[1]!);
   assert.ok(blocks.length >= 2);
   for (const b of blocks) assert.deepEqual(checkPlan(JSON.parse(b)).errors, []);
@@ -21,7 +24,7 @@ test("plugin, marketplace and package versions agree", () => {
 });
 
 test("SKILL.md has name + description frontmatter", () => {
-  const skill = readFileSync("plugins/graftree/skills/graftree/SKILL.md", "utf8");
+  const skill = readText("plugins/graftree/skills/graftree/SKILL.md");
   const fm = /^---\nname: (.+)\ndescription: (.+)\n---\n/.exec(skill);
   assert.ok(fm, "frontmatter missing");
   assert.equal(fm[1], "graftree");
