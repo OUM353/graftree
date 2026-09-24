@@ -69,3 +69,4 @@ rewriting, maybe copy), each worth several attempts.
 |---|---|---|
 | Reference solution | 38/38 | – |
 | Untouched starter | 1/38 | – |
+| Single agent: Claude Haiku 4.5 (Claude Code, one prompt) | 12/38 | 1 |
