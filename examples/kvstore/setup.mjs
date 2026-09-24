@@ -19,5 +19,6 @@ cpSync(fileURLToPath(new URL("./starter", import.meta.url)), dir, { recursive: t
 const git = (...args) => execFileSync("git", args, { cwd: dir, stdio: "inherit" });
 git("init", "-q");
 git("add", ".");
-git("commit", "-q", "-m", "kvstore starter");
+// A fixed author, so this works on machines without a git identity (e.g. CI).
+git("-c", "user.name=kvstore starter", "-c", "user.email=starter@example.invalid", "commit", "-q", "-m", "kvstore starter");
 console.log(`Ready: ${dir}`);
