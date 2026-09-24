@@ -23,6 +23,7 @@ const bad = {
   parser: () => w("src/parser/index.mjs", "export const parse = () => ({});\n"),
   eval: () => w("src/eval/index.mjs", "export const evaluate = () => 0;\n"),
 };
+if (behavior === "critic") { console.log(JSON.stringify({ type: "result", result: "VERDICT: concerns\nISSUES:\n- [severity medium] x" })); process.exit(0); }
 if (behavior === "review") { console.log(JSON.stringify({ type: "result", result: "VERDICT: pass\nISSUES: none" })); process.exit(0); }
 if (behavior === "good" || (behavior === "fixer" && repairing)) good[node]();
 else if (behavior === "bad" || behavior === "fixer") bad[node]();
@@ -73,7 +74,7 @@ export async function approvedRun(plan: PlanInput, config: { solver: string[]; i
   const root = tempRepo();
   const agent = `${root}-agent.mjs`;
   writeFileSync(agent, FAKE_AGENT);
-  const behaviors = ["good", "bad", "cheat", "sprawl", "fixer", "review"];
+  const behaviors = ["good", "bad", "cheat", "sprawl", "fixer", "review", "critic"];
   const workers = behaviors
     .map((b) => `  ${b}:\n    type: cli\n    command: [${JSON.stringify(process.execPath)}, ${JSON.stringify(agent)}, ${b}, "{prompt}"]\n    output: ndjson`)
     .join("\n");

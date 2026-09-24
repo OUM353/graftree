@@ -135,3 +135,21 @@ test("config.ignore keeps agent metadata out of snapshots and the ownership gate
   const s = await runTree(store, runId);
   assert.equal(s.decisions[0]!.candidates[0]!.status, "passed");
 });
+
+test("reviews continue until the top-ranked candidate has been reviewed", async () => {
+  // All solvers pass; the critic flags every attempt it sees, so each review
+  // knocks the leader down and the next leader must be reviewed too.
+  const { store, runId } = await approvedRun(focusedPlan(), { solver: ["good"], reviewer: ["critic"], extra: "budgets:\n  attemptsPerLeaf: 3" });
+  await runTree(store, runId);
+  const node = (await store.loadRun(runId)).nodes.parser!;
+  assert.deepEqual(node.attempts.map((a) => a.reviewVerdict), ["concerns", "concerns", "concerns"]);
+  const best = [...node.attempts].sort((x, y) => (y.score ?? 0) - (x.score ?? 0))[0]!;
+  assert.equal(node.recommended, best.n);
+
+  // With an approving reviewer, only the leader needs a review.
+  const r2 = await approvedRun(focusedPlan(), { solver: ["good"], reviewer: ["review"], extra: "budgets:\n  attemptsPerLeaf: 3" });
+  await runTree(r2.store, r2.runId);
+  const n2 = (await r2.store.loadRun(r2.runId)).nodes.parser!;
+  assert.equal(n2.attempts.filter((a) => a.review).length, 1);
+  assert.equal(n2.attempts.find((a) => a.n === n2.recommended)!.reviewVerdict, "pass");
+});

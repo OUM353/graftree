@@ -322,18 +322,22 @@ async function repairNode(c: Ctx, node: NodeState): Promise<boolean> {
 async function reviewCandidates(c: Ctx, node: NodeState): Promise<void> {
   const reviewers = engineWorkers(c.cfg.roles.reviewer);
   if (!reviewers.length) return;
-  const top = node.attempts
-    .filter((a) => a.status === "passed" && !a.review && a.worktree && existsSync(a.worktree))
-    .sort((x, y) => (y.score ?? 0) - (x.score ?? 0))
-    .slice(0, 2);
-  for (const [i, a] of top.entries()) {
-    const reviewer = reviewers[i % reviewers.length]!;
+  // Keep reviewing whoever currently ranks first until the leader is a reviewed attempt,
+  // so an unreviewed candidate never wins just because nobody looked at it.
+  for (let i = 0; ; i++) {
+    const ranked = node.attempts
+      .filter((a) => a.status === "passed")
+      .sort((x, y) => (y.score ?? 0) - (x.score ?? 0));
+    const a = ranked.find((x) => !x.review);
+    const leader = ranked[0];
+    if (!a || !leader || leader.review || !a.worktree || !existsSync(a.worktree)) return;
+    if (a !== leader) return;
     // Prefer a reviewer different from the author when possible.
-    const pick = reviewers.find((r) => r !== a.worker) ?? reviewer;
+    const pick = reviewers.find((r) => r !== a.worker) ?? reviewers[i % reviewers.length]!;
     c.say(`  ${node.id}/a${a.n}: review by ${pick}`);
     const diff = await diffText(c.store.root, node.base!, a.commit!);
-    const res = await runWorker(pick, getWorker(c.cfg, pick), { prompt: reviewerPrompt(c.run, node, tail(diff, 60_000)), cwd: a.worktree! });
-    await resetWorktree(a.worktree!);
+    const res = await runWorker(pick, getWorker(c.cfg, pick), { prompt: reviewerPrompt(c.run, node, tail(diff, 60_000)), cwd: a.worktree });
+    await resetWorktree(a.worktree);
     const file = logPath(c, node.id, a.n, "review.md");
     await writeLog(file, `# Review of ${node.id}/a${a.n} by ${pick}\n\n${res.ok ? res.text : `reviewer failed: ${res.stderr}`}\n`);
     a.review = relRun(c, file);
