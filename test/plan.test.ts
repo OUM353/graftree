@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkPlan, renderTree } from "../src/plan.js";
+import { checkPlan, estimateNotice, estimateWork, renderTree } from "../src/plan.js";
+import { Config } from "../src/schema.js";
 import { samplePlan } from "./helpers.js";
 
 const errorsOf = (mutate: (p: ReturnType<typeof samplePlan>) => void) => {
@@ -64,4 +65,27 @@ test("schema errors are reported, not thrown", () => {
 test("renderTree draws the hierarchy", () => {
   const t = renderTree(checkPlan(samplePlan()).plan!, (n) => n.id);
   assert.equal(t, "root\n├─ parser\n└─ eval");
+});
+
+test("estimateWork counts worker calls before anything is spent", () => {
+  const plan = checkPlan(samplePlan()).plan!; // 1 split, 2 leaves, standard = 3 attempts per leaf
+  const cfg = (roles: Record<string, string[]>, budgets = {}) =>
+    Config.parse({ version: 1, workers: { w1: { type: "cli", command: ["w1"] }, w2: { type: "cli", command: ["w2"] } }, roles, budgets });
+
+  // Workers solve and review; the closer plans and integrates.
+  const e = estimateWork(plan, cfg({ solver: ["w1"], reviewer: ["w2"] }, { maxRepairRounds: 2 }));
+  assert.deepEqual(e, { leaves: 2, splits: 1, attemptsPerLeaf: 3, solverRuns: 6, minCalls: 9, maxCalls: 25, closerWorks: true });
+  assert.match(estimateNotice(e), /^⚠ Cost: expect 9–25 worker calls \(a single-agent run is 1\), plus the closer's own/);
+
+  // Closer in the solver rotation: only the workers' share is counted; repairAll off caps repairs per node.
+  const mixed = estimateWork(plan, cfg({ planner: ["w1"], test_writer: ["w1"], solver: ["w1", "closer"], integrator: ["w1"], reviewer: ["w1"] }, { attemptsPerLeaf: 2, maxRepairRounds: 1, repairAll: false }));
+  assert.equal(mixed.solverRuns, 2);
+  assert.equal(mixed.minCalls, 2 + 1 + 3);
+  assert.equal(mixed.maxCalls, 2 + 2 + 1 + 5);
+  assert.equal(mixed.closerWorks, true);
+
+  // Everything by workers: nothing unmetered, so no closer caveat.
+  const all = estimateWork(plan, cfg({ planner: ["w1"], test_writer: ["w1"], solver: ["w1"], integrator: ["w1"], reviewer: ["w1"] }));
+  assert.equal(all.closerWorks, false);
+  assert.doesNotMatch(estimateNotice(all), /closer/);
 });

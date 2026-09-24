@@ -33,8 +33,11 @@ skills support, paste the snippet below into the project's `AGENTS.md`:
 For hard problems where correctness matters more than speed, follow the
 protocol in `<path>/plugins/graftree/skills/graftree/SKILL.md` and drive the
 `graftree` CLI (`npx -y graftree-agent …`, always with `--json`). You are the
-closer: you make every final decision. Always stop for human approval after
-`graftree plan`, and never modify locked acceptance tests.
+closer: you make every final decision. It costs several to dozens of times
+the tokens of solving directly, so suggest it only when a single agent is likely
+to get the task wrong. Always stop for human approval after `graftree plan`,
+quote its `⚠ Cost:` estimate when you ask, and never modify locked acceptance
+tests.
 ```
 
 ## Headless / CI

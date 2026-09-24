@@ -34,7 +34,9 @@ test("plan → approve locks tests in a base commit without touching the working
   const planned = await store.loadRun(run.id);
   assert.equal(planned.status, "awaiting_approval");
   assert.equal(Object.keys(planned.nodes).length, 3);
-  assert.match(readFileSync(store.planMdPath(run.id), "utf8"), /Solver runs: 2 leaves × 3 attempts = \*\*6\*\*/);
+  const md = readFileSync(store.planMdPath(run.id), "utf8");
+  assert.match(md, /Solver runs: 2 leaves × 3 attempts \(0 by workers, the rest by the closer\)/);
+  assert.match(md, /⚠ Cost: expect 0 worker calls \(a single-agent run is 1\), plus the closer's own/);
 
   const approved = await approveRun(store, planned, "looks right");
   assert.equal(approved.status, "approved");

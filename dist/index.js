@@ -2,7 +2,7 @@
 export * from "./schema.js";
 export { loadConfig, getWorker, workersForRole } from "./config.js";
 export { Store, GRAFTREE_DIR } from "./store.js";
-export { effectiveDeps, checkPlan, nodesFromPlan, renderPlanMarkdown, renderTree, allAcceptanceFiles } from "./plan.js";
+export { effectiveDeps, checkPlan, estimateNotice, estimateWork, nodesFromPlan, renderPlanMarkdown, renderTree, allAcceptanceFiles } from "./plan.js";
 export { newRun, submitPlan, planWithWorker, approveRun, rejectRun, checkLocked } from "./lifecycle.js";
 export { plannerPrompt, planJsonSchema, PLANNER_OUT_DIR } from "./prompts.js";
 export { runWorker } from "./workers/index.js";

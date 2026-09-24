@@ -7,6 +7,21 @@ acceptance tests *before* any code, then solves each leaf several times in
 isolated git worktrees, across different models. The verified results are merged
 back up into a single best solution. It trades speed and tokens for accuracy.
 
+> **⚠ It uses a lot of tokens.** A run makes many model calls: several attempts
+> per sub-task, repairs, reviews and integrations, plus the planning and review
+> done by the closer (e.g. Claude Code) itself. Expect roughly **5–30× the
+> tokens of one agent solving the task directly**. `graftree plan` prints an
+> estimate (`⚠ Cost: expect N–M worker calls`) before you approve, warnings fire
+> during a run when usage gets high, and `report.md` lists what was spent. The
+> closer's own usage is not included in those numbers; check it in your agent
+> (for Claude Code, `/cost`).
+>
+> **Use it where a single agent tends to get things subtly wrong:** many
+> interacting requirements, tricky edge cases, a vague spec, an unexplained bug.
+> On a small, clearly specified task a single agent is usually just as accurate.
+> In our [kvstore example](examples/kvstore/) both scored 25/25 on a hidden
+> test suite, and graftree cost 6× the worker calls.
+
 The agent that invokes it (Claude Code by default) is always the **closer**: it
 makes every final decision. Other models, such as DeepSeek via
 [CommandCode](https://www.npmjs.com/package/command-code), anything on
