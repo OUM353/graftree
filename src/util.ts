@@ -26,6 +26,18 @@ export async function writeFileAtomic(path: string, data: string): Promise<void>
   await rename(tmp, path);
 }
 
+/**
+ * A safe, short file name for a label such as "acceptance: <command>". Long
+ * labels are cut and get a hash suffix so they stay unique and well under
+ * file-name and Windows path limits.
+ */
+export function logFileName(label: string, ext = ".log"): string {
+  const slug = label.replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "");
+  if (slug.length <= 60) return `${slug || "log"}${ext}`;
+  const hash = createHash("sha256").update(label).digest("hex").slice(0, 10);
+  return `${slug.slice(0, 48).replace(/_+$/, "")}-${hash}${ext}`;
+}
+
 /** Normalize a repo-relative path and reject anything escaping the repo. */
 export function normalizeRepoPath(p: string): string {
   const parts: string[] = [];

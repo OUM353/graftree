@@ -1,6 +1,6 @@
 {
   "name": "graftree",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Solve hard coding problems accurately: decompose into a tree, test-first, redundant multi-model attempts, verified merges. The invoking agent stays the final decision-maker. Token-heavy by design: several to dozens of times a single-agent run.",
   "author": {
     "name": "oum353"

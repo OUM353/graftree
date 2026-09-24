@@ -7,7 +7,7 @@ import type { CheckResult, Config, Run } from "./schema.js";
 import { removeRunWorktrees } from "./solve.js";
 import { logEvent, type Store } from "./store.js";
 import { formatUsage, recordedWarnings, runUsage, sumUsage } from "./usage.js";
-import { GraftreeError, now, writeFileAtomic } from "./util.js";
+import { GraftreeError, logFileName, now, writeFileAtomic } from "./util.js";
 
 export interface CloseResult {
   run: Run;
@@ -37,7 +37,7 @@ export async function closeRun(store: Store, runId: string | undefined, opts: { 
   const checks: Record<string, CheckResult> = {};
   const check = async (name: string, cmd: string) => {
     const r = await runShell(cmd, wt, cfg.commands.timeoutSec);
-    const log = join(store.runDir(run.id), "final", `${name.replace(/[^a-z0-9._-]/gi, "_")}.log`);
+    const log = join(store.runDir(run.id), "final", logFileName(name));
     await writeLog(log, `$ ${cmd}\n${r.output}\n[exit ${r.exitCode}${r.timedOut ? ", timed out" : ""}]\n`);
     checks[name] = { ok: r.exitCode === 0, exitCode: r.exitCode, log: relative(store.runDir(run.id), log), violations: [] };
   };
