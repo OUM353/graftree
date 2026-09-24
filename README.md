@@ -57,7 +57,7 @@ The skill is a plain folder: [`plugins/graftree/skills/graftree/`](plugins/graft
 npm i -g graftree-agent               # after the npm release
 # While the repo is private (uses your normal git login; dist/ is prebuilt, no build step):
 git clone -b claude/stoic-einstein-6rjiws https://github.com/OUM353/Agent-tree.git graftree-src
-cd graftree-src && npm pack && npm i -g graftree-agent-0.2.0.tgz
+cd graftree-src && npm pack && npm i -g graftree-agent-0.3.0.tgz
 
 # Once public:
 npm i -g https://codeload.github.com/oum353/agent-tree/tar.gz/refs/heads/claude/stoic-einstein-6rjiws
@@ -96,7 +96,10 @@ graftree close                                   # final checks → branch graft
 ```
 
 The engine never picks winners on its own unless you set `budgets.autoSelect: true`
-or pass `run --auto-select` (for CI). Other commands: `retry NODE` (more attempts),
+or pass `run --auto-select` (for CI). When a review finds a real bug the tests missed,
+`harden NODE --tests DIR --command "…" --reason "…" --yes` adds new tests (with your OK):
+they are locked, existing attempts re-verify, and failures go through repair.
+Other commands: `retry NODE` (more attempts),
 `attempt NODE --worktree P` (submit your own candidate through the same gates),
 `clean` (remove worktrees).
 
@@ -145,6 +148,14 @@ Each candidate passes through these gates in order. Failing any one of them rule
 
 Passing candidates are then scored on diff size, lint, repairs needed and review
 verdict. The closer decides which one wins.
+
+Reviews look for what the tests missed. Each reviewer also gets the findings raised
+on sibling attempts and must confirm or rule out each one for its own candidate.
+A finding that proves real can become a hardening test (see above). A repair
+invalidates the old review, so repaired code is reviewed again.
+
+Every worker call is metered: tokens in and out per attempt, totals in `run`/`show`
+output, and a cost section in `report.md`.
 
 ## Verification status
 

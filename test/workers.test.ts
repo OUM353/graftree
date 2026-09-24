@@ -90,3 +90,11 @@ test("a failed result event marks the worker run as not ok", async () => {
   assert.equal(res.ok, false);
   assert.equal(res.text, "boom");
 });
+
+test("normalizeUsage understands CommandCode, Claude and OpenAI shapes", async () => {
+  const { normalizeUsage } = await import("../src/usage.js");
+  assert.deepEqual(normalizeUsage({ inputTokens: 5, outputTokens: 2, cacheReadTokens: 1 }), { inputTokens: 5, outputTokens: 2, cacheReadTokens: 1 });
+  assert.deepEqual(normalizeUsage({ input_tokens: 5, output_tokens: 2, cache_read_input_tokens: 3 }), { inputTokens: 5, outputTokens: 2, cacheReadTokens: 3 });
+  assert.deepEqual(normalizeUsage({ prompt_tokens: 5, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 4 } }), { inputTokens: 5, outputTokens: 2, cacheReadTokens: 4 });
+  assert.deepEqual(normalizeUsage(undefined), { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 });
+});

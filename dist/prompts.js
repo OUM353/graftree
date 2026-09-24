@@ -83,8 +83,8 @@ ${consumed.length ? `\nSibling contracts you rely on:\n${consumed.map((s) => `- 
 You may ONLY modify files matching:
 ${bullet(node.ownedPaths)}
 
-Acceptance: this command must exit 0 from the repo root:
-    ${node.acceptance.command}
+Acceptance: ${node.acceptance.extraCommands.length ? "each of these commands" : "this command"} must exit 0 from the repo root:
+${[node.acceptance.command, ...node.acceptance.extraCommands].map((c) => `    ${c}`).join("\n")}
 Acceptance test files (read them first; they define "done"):
 ${bullet(node.acceptance.files)}
 ${node.acceptance.rubric ? `\nAlso satisfy this rubric: ${node.acceptance.rubric}\n` : ""}`;
@@ -142,13 +142,28 @@ ${failure}
 You may ONLY modify files matching:
 ${bullet(allowed)}
 
-Acceptance: this command must exit 0 from the repo root:
-    ${node.acceptance.command}
+Acceptance: these commands must exit 0 from the repo root:
+${[node.acceptance.command, ...node.acceptance.extraCommands].map((c) => `    ${c}`).join("\n")}
 
 ${HARD_RULES}
 `;
 }
-export function reviewerPrompt(run, node, diff) {
+export function reviewerPrompt(run, node, diff, siblingFindings = "") {
+    const cross = siblingFindings
+        ? `
+## Findings on sibling candidates
+
+Other independent attempts at this same node were reviewed and these issues were found.
+For EACH one, check whether it ALSO applies to THIS change, ideally by running the input:
+
+${siblingFindings}
+
+Include this section in your reply:
+SIBLING FINDINGS:
+- <finding> — applies (<input that shows it>) | does not apply (<why>)
+Any finding that applies counts toward your verdict.
+`
+        : "";
     return `You are an ADVERSARIAL REVIEWER in graftree. The change below already passes its tests.
 Your job is to find what the tests missed: inputs, edge cases, concurrency, error paths,
 or contract violations where the code is WRONG. Do not modify any files.
@@ -159,7 +174,7 @@ ${nodeBrief(run, node)}
 \`\`\`diff
 ${diff}
 \`\`\`
-
+${cross}
 Reply in this format:
 VERDICT: pass | concerns | fail
 ISSUES:

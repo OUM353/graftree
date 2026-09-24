@@ -1,6 +1,6 @@
 {
   "name": "graftree-agent",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Tree-structured, test-first, multi-model coding agent engine: decompose hard problems, solve in isolated worktrees across models, merge verified results into one best answer.",
   "license": "MIT",
   "type": "module",

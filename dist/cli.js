@@ -9,7 +9,8 @@ import { CONFIG_TEMPLATE_PATH, PACKAGE_ROOT, getWorker, loadConfig } from "./con
 import { approveRun, checkLocked, newRun, planWithWorker, rejectRun, submitPlan } from "./lifecycle.js";
 import { closeRun } from "./close.js";
 import { renderTree } from "./plan.js";
-import { addExternalAttempt, attemptDiff, decide, removeRunWorktrees, retry, runTree, summarize } from "./solve.js";
+import { addExternalAttempt, attemptDiff, decide, harden, removeRunWorktrees, retry, runTree, summarize } from "./solve.js";
+import { formatUsage, runUsage } from "./usage.js";
 import { Config, Plan, Run, Tier } from "./schema.js";
 import { Store } from "./store.js";
 import { GraftreeError } from "./util.js";
@@ -40,6 +41,8 @@ Solve phase (after approval)
   retry NODE [--count N] [--run R]   More engine attempts for a leaf
   attempt NODE (--worktree P | --commit REV) [--run R] [--notes "…"]
                                      Submit a closer-made candidate (same gates)
+  harden NODE --tests DIR --command "…" --reason "…" --yes [--run R]
+                                     Add tests from a review finding (additive; needs human OK)
   close [run] [--keep-worktrees]     Final checks, final branch, report.md
   clean [run]                        Remove the run's worktrees (branches are kept)
 
@@ -85,6 +88,8 @@ function humanSummary(sum) {
             lines.push(`    a${c.n} ${c.worker.padEnd(18)} ${c.status.padEnd(12)}${c.score !== undefined ? ` score ${c.score}` : ""}${stat}${c.review ? ` review:${c.review}` : ""}${d.recommended === c.n ? "  ← recommended" : ""}`);
         }
     }
+    if (sum.usage.calls)
+        lines.push("", `Cost so far: ${formatUsage(sum.usage)}`);
     lines.push("", `Next: ${sum.next}`);
     return lines.join("\n");
 }
@@ -105,6 +110,9 @@ async function main(argv) {
             count: { type: "string" },
             "auto-select": { type: "boolean" },
             "keep-worktrees": { type: "boolean", default: false },
+            command: { type: "string" },
+            reason: { type: "string" },
+            yes: { type: "boolean", default: false },
             force: { type: "boolean", default: false },
             help: { type: "boolean", short: "h", default: false },
             version: { type: "boolean", short: "v", default: false },
@@ -192,6 +200,11 @@ async function main(argv) {
             const sum = summarize(run);
             if (sum.decisions.length)
                 lines.push("", humanSummary(sum));
+            if (run.hardening.length)
+                lines.push(`Hardened: ${run.hardening.map((h) => `${h.node} (+${h.files.length})`).join(", ")}`);
+            const u = runUsage(run);
+            if (u.calls)
+                lines.push(`Cost: ${formatUsage(u)}`);
             if (run.final)
                 lines.push(`Final: ${run.final.branch} (${run.final.commit.slice(0, 12)})`);
             print(out, lines.join("\n"), run);
@@ -243,6 +256,20 @@ async function main(argv) {
             const detail = g ? [g.locked, g.ownership].flatMap((x) => x.violations).join("; ") : "";
             print(out, `${node}/a${a.n} (closer): ${a.status}${detail ? ` — ${detail}` : ""}`, { ok: a.status === "passed", attempt: a });
             return a.status === "passed" ? 0 : 4;
+        }
+        case "harden": {
+            const [node] = rest;
+            if (!node || !values.tests || !values.command || !values.reason) {
+                throw new GraftreeError('usage: graftree harden NODE --tests DIR --command "…" --reason "…" --yes [--run R]', "invalid");
+            }
+            if (!values.yes) {
+                print(out, `Hardening adds tests to ${node} after approval: they get locked, the node re-verifies, and ancestors re-integrate.\nGet the human's OK first, then re-run with --yes.`, { ok: false, needs: "--yes", node });
+                return 2;
+            }
+            const run = await harden(store, values.run, node, { testsFrom: resolve(values.tests), command: values.command, reason: values.reason });
+            const h = run.hardening.at(-1);
+            print(out, `${node}: hardened with ${h.files.join(", ")}. Next: graftree run ${run.id}`, { ok: true, run: run.id, hardening: h });
+            return 0;
         }
         case "close": {
             const res = await closeRun(store, rest[0], { keepWorktrees: values["keep-worktrees"] });

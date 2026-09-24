@@ -135,6 +135,30 @@ parent automatically.
 Rules that don't bend: `decide` accepts only attempts that passed every gate,
 and an attempt you submit goes through exactly the same gates as a worker's.
 
+### Turning review findings into tests (hardening)
+
+Reviews are advisory until a test enforces them. When a review finding is
+**real** (you reproduced it, or it plainly contradicts the goal), and it
+applies to the candidate you'd pick (reviewers now check sibling findings
+against each candidate; read their `SIBLING FINDINGS` section):
+
+1. Write a small new test file that fails on that input, at a new repo path
+   (for example `test/parser.hardening.test.mjs`) inside a scratch dir that
+   mirrors repo paths.
+2. **Ask the user** with the finding, the test, and why it matters. Hardening
+   raises the bar after approval, so it needs their OK.
+3. With their OK, run `$GT harden <node> --tests <dir> --command "<runs the new test>" --reason "<the finding>" --yes --run <run>`.
+4. Run `$GT run <run>` again. Existing attempts are re-verified against the new
+   tests; the ones that now fail go through repair (a fresh repair budget).
+   Then decide as usual.
+
+Hardening only adds files. It can never change or remove an approved test.
+Every hardening is listed in the report with its reason. Don't harden for
+style or speculative issues; for those, put them in the report.
+
+Cost so far appears in `run`/`show` output (`Cost so far: … calls, … in / … out`).
+Mention it when you summarize for the user.
+
 ## Phase 5: Close
 
 ```bash

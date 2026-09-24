@@ -9,6 +9,7 @@ import { PLANNER_OUT_DIR, plannerPrompt } from "./prompts.js";
 import type { LockedFile, Run, RunStatus, Tier } from "./schema.js";
 import { logEvent, type Store } from "./store.js";
 import { GraftreeError, now, sha256File, writeFileAtomic } from "./util.js";
+import { addUsage } from "./usage.js";
 import { runWorker, type WorkerResult } from "./workers/index.js";
 
 const PLANNABLE: RunStatus[] = ["draft", "needs_replan", "awaiting_approval"];
@@ -75,6 +76,7 @@ export async function planWithWorker(store: Store, run: Run, workerName: string)
   await addDetachedWorktree(store.root, wt, "HEAD");
   try {
     const result = await runWorker(workerName, w, { prompt: plannerPrompt(run), cwd: wt });
+    run.overheadUsage = addUsage(run.overheadUsage, result);
     await mkdir(store.runDir(run.id), { recursive: true });
     await writeFileAtomic(join(store.runDir(run.id), "planner.log"), `${result.stdout}\n--- stderr ---\n${result.stderr}`);
     const planPath = join(wt, PLANNER_OUT_DIR, "plan.json");
@@ -155,10 +157,11 @@ export interface LockViolation {
  * Check a candidate commit against the locked acceptance tests. Any change to a
  * locked file disqualifies the candidate.
  */
-export async function checkLocked(store: Store, run: Run, candidateCommit: string): Promise<LockViolation[]> {
+export async function checkLocked(store: Store, run: Run, candidateCommit: string, from?: string): Promise<LockViolation[]> {
   if (!run.approval) throw new GraftreeError(`run ${run.id} is not approved`, "bad_status");
   const lockedPaths = new Set(run.approval.locked.map((l) => l.path));
-  const changed = await changedFiles(store.root, run.approval.baseCommit, candidateCommit);
+  // Compare against where the candidate started (its node base); defaults to the run base.
+  const changed = await changedFiles(store.root, from ?? run.approval.baseCommit, candidateCommit);
   const violations: LockViolation[] = [];
   for (const p of changed) {
     if (!lockedPaths.has(p)) continue;

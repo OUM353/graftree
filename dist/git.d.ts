@@ -8,7 +8,7 @@ export declare function headCommit(root: string): Promise<string>;
 export declare function commitOverlay(root: string, files: {
     repoPath: string;
     sourcePath: string;
-}[], message: string, ref: string): Promise<{
+}[], message: string, ref: string, parentCommit?: string): Promise<{
     commit: string;
     parent: string;
 }>;

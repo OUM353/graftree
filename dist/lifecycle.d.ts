@@ -32,4 +32,4 @@ export interface LockViolation {
  * Check a candidate commit against the locked acceptance tests. Any change to a
  * locked file disqualifies the candidate.
  */
-export declare function checkLocked(store: Store, run: Run, candidateCommit: string): Promise<LockViolation[]>;
+export declare function checkLocked(store: Store, run: Run, candidateCommit: string, from?: string): Promise<LockViolation[]>;

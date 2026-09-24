@@ -5,6 +5,7 @@ import { addDetachedWorktree, diffStat, git, removeWorktree } from "./git.js";
 import { renderTree } from "./plan.js";
 import { removeRunWorktrees } from "./solve.js";
 import { logEvent } from "./store.js";
+import { formatUsage, runUsage, sumUsage } from "./usage.js";
 import { GraftreeError, now, writeFileAtomic } from "./util.js";
 /**
  * Final verification at the root: every node's acceptance command plus the
@@ -35,7 +36,8 @@ export async function closeRun(store, runId, opts = {}) {
             await check("setup", cfg.commands.setup);
         if (cfg.commands.build)
             await check("build", cfg.commands.build);
-        for (const cmd of new Set(Object.values(run.nodes).map((n) => n.acceptance.command)))
+        const cmds = new Set(Object.values(run.nodes).flatMap((n) => [n.acceptance.command, ...n.acceptance.extraCommands]));
+        for (const cmd of cmds)
             await check(`acceptance: ${cmd}`, cmd);
         if (cfg.commands.test)
             await check("test", cfg.commands.test);
@@ -90,14 +92,31 @@ async function renderReport(store, run, cfg, checks, commit) {
         const s = run.nodes[n.id];
         md.push(`### ${n.id} — ${n.kind}`, "", n.goal, "");
         md.push(`Winner: ${s.winner ? `a${s.winner}` : "—"} · decided by ${s.decidedBy ?? "—"}${s.decisionNotes ? ` — ${s.decisionNotes}` : ""}`, "");
-        md.push("| Attempt | Worker | Status | Repairs | Diff | Score | Review |", "|---|---|---|---|---|---|---|");
+        const nodeUsage = sumUsage(s.attempts.map((a) => a.usage));
+        if (nodeUsage.calls)
+            md.push(`Cost: ${formatUsage(nodeUsage)}`, "");
+        md.push("| Attempt | Worker | Status | Repairs | Diff | Score | Review | Tokens (in/out) |", "|---|---|---|---|---|---|---|---|");
         for (const a of s.attempts) {
             const d = a.diffStat ? `${a.diffStat.files}f +${a.diffStat.insertions} −${a.diffStat.deletions}` : "—";
             const why = a.status === "disqualified" ? ` (${[...(a.gates?.locked.violations ?? []), ...(a.gates?.ownership.violations ?? [])].join("; ")})` : "";
-            md.push(`| a${a.n}${a.n === s.winner ? " ★" : ""} | ${a.worker} | ${a.status}${why} | ${a.repairs} | ${d} | ${a.score ?? "—"} | ${a.reviewVerdict ?? "—"} |`);
+            const tok = a.usage ? `${a.usage.inputTokens} / ${a.usage.outputTokens}` : "—";
+            md.push(`| a${a.n}${a.n === s.winner ? " ★" : ""} | ${a.worker} | ${a.status}${why} | ${a.repairs} | ${d} | ${a.score ?? "—"} | ${a.reviewVerdict ?? "—"} | ${tok} |`);
         }
         md.push("");
     }
+    if (run.hardening.length) {
+        md.push("## Hardening (tests added after approval)", "");
+        md.push("Each entry adds new test files from a review finding. The originally approved tests were never changed.", "");
+        for (const h of run.hardening) {
+            md.push(`- **${h.node}** (${h.at}): ${h.reason}`, `  - files: ${h.files.map((f) => `\`${f}\``).join(", ")}`, `  - command: \`${h.command}\``);
+        }
+        md.push("");
+    }
+    const total = runUsage(run);
+    md.push("## Cost", "", `Total: ${formatUsage(total)}`);
+    if (run.overheadUsage)
+        md.push(`Planning: ${formatUsage(run.overheadUsage)}`);
+    md.push("");
     md.push("## Workers", "", ...Object.entries(cfg.roles).map(([r, ws]) => `- ${r}: ${ws.join(", ")}`), "");
     if (run.final) {
         md.push("## Next", "", "```", `git log --oneline ${run.approval.headCommit.slice(0, 12)}..${run.final.branch}`, `git merge ${run.final.branch}      # or cherry-pick / open a PR from it`, "```", "");

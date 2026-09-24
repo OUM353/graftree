@@ -149,7 +149,7 @@ export function checkPlan(input, opts = {}) {
 export function nodesFromPlan(plan) {
     const out = {};
     for (const n of plan.nodes) {
-        out[n.id] = { ...n, status: "planned", base: null, targetAttempts: null, attempts: [], recommended: null, winner: null, decidedBy: null };
+        out[n.id] = { ...n, status: "planned", base: null, targetAttempts: null, attempts: [], recommended: null, winner: null, decidedBy: null, regate: false };
     }
     return out;
 }
@@ -202,6 +202,8 @@ export function renderPlanMarkdown(run, cfg) {
         if (n.dependsOn.length)
             md.push(`- **Depends on:** ${n.dependsOn.join(", ")}`);
         md.push(`- **Acceptance:** \`${n.acceptance.command}\``);
+        for (const c of n.acceptance.extraCommands)
+            md.push(`  - hardening: \`${c}\``);
         for (const f of n.acceptance.files)
             md.push(`  - test: \`${f}\` (draft: \`tests/${f}\`)`);
         if (n.acceptance.rubric)

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, open, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, open, readFile, readdir, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { getWorker, loadConfig } from "./config.js";
 import { runShell, tail, writeLog } from "./exec.js";
@@ -7,6 +7,7 @@ import {
   addBranchWorktree,
   addDetachedWorktree,
   changedFiles,
+  commitOverlay,
   commitAll,
   diffStat,
   diffText,
@@ -21,7 +22,8 @@ import { checkLocked } from "./lifecycle.js";
 import { integratorPrompt, repairPrompt, reviewerPrompt, solverPrompt } from "./prompts.js";
 import { CLOSER, TIER_DEFAULTS, type Attempt, type CheckResult, type Config, type NodeState, type Run, type RunStatus } from "./schema.js";
 import { logEvent, type Store } from "./store.js";
-import { GraftreeError, now } from "./util.js";
+import { addUsage, runUsage } from "./usage.js";
+import { GraftreeError, normalizeRepoPath, now, sha256File } from "./util.js";
 import { runWorker } from "./workers/index.js";
 
 // ---------------------------------------------------------------------------
@@ -162,13 +164,13 @@ async function runCheck(c: Ctx, cwd: string, commands: string[], log: string): P
 
 /** Commands that must pass for a node: its own, plus every descendant's (no regressions inside the subtree). */
 function acceptanceCommands(run: Run, node: NodeState): string[] {
-  return [...new Set([node, ...descendantsOf(run, node.id)].map((n) => n.acceptance.command))];
+  return [...new Set([node, ...descendantsOf(run, node.id)].flatMap((n) => [n.acceptance.command, ...n.acceptance.extraCommands]))];
 }
 
 async function gateAttempt(c: Ctx, node: NodeState, a: Attempt, wt: string): Promise<void> {
   const commit = a.commit!;
   const base = node.base!;
-  const locked = await checkLocked(c.store, c.run, commit);
+  const locked = await checkLocked(c.store, c.run, commit, base);
   const changed = await changedFiles(c.store.root, base, commit);
   const isSplit = node.kind === "split";
   const outside = changed.filter((f) => (isSplit ? !integrationAllows(c.run, node, f) : !matchesAny(node.ownedPaths, f)));
@@ -242,6 +244,7 @@ async function prepareWorktree(c: Ctx, wt: string, branch: string | null, base: 
 async function invokeWorker(c: Ctx, node: NodeState, a: Attempt, workerName: string, prompt: string, logFile: string): Promise<void> {
   const w = getWorker(c.cfg, workerName);
   const res = await runWorker(workerName, w, { prompt, cwd: a.worktree! });
+  a.usage = addUsage(a.usage, res);
   await writeLog(logPath(c, node.id, a.n, logFile), `${res.stdout}\n--- stderr ---\n${res.stderr}\n--- result ---\n${res.text}`);
   if (!res.ok) c.say(`  ${node.id}/a${a.n} ${workerName}: worker exited ${res.exitCode}${res.timedOut ? " (timed out)" : ""}`);
 }
@@ -286,7 +289,10 @@ async function repairNode(c: Ctx, node: NodeState): Promise<boolean> {
   const isSplit = node.kind === "split";
   const pool = engineWorkers(isSplit ? c.cfg.roles.integrator : c.cfg.roles.solver);
   let rounds = node.attempts.reduce((s, a) => s + a.repairs, 0);
-  while (rounds < c.cfg.budgets.maxRepairRounds && Date.now() < c.deadline) {
+  // Each hardening of this node grants a fresh repair budget: the bar moved, so fixing is expected.
+  const hardenings = c.run.hardening.filter((h) => h.node === node.id).length;
+  const budget = c.cfg.budgets.maxRepairRounds * (1 + hardenings);
+  while (rounds < budget && Date.now() < c.deadline) {
     // Best near-miss: failed (not disqualified), engine-managed worktree, fewest repairs, smallest diff.
     const candidates = node.attempts
       .filter((a) => a.status === "failed" && a.kind !== "external" && a.worktree && existsSync(a.worktree))
@@ -307,6 +313,9 @@ async function repairNode(c: Ctx, node: NodeState): Promise<boolean> {
       await invokeWorker(c, node, a, workerName, prompt, `repair${a.repairs}.log`);
       if (isSplit && a.worker === "merge") a.worker = workerName;
       await snapshotAndGate(c, node, a, `graftree ${c.run.id} ${node.id} a${a.n} repair ${a.repairs} (${workerName})`);
+      // The code changed, so any earlier review no longer describes it.
+      a.review = undefined;
+      a.reviewVerdict = undefined;
     } catch (e) {
       a.status = "error";
       a.notes = (e as Error).message;
@@ -317,6 +326,22 @@ async function repairNode(c: Ctx, node: NodeState): Promise<boolean> {
     if ((a.status as Attempt["status"]) === "passed") return true;
   }
   return false;
+}
+
+/**
+ * Findings raised on other attempts at this node. The next reviewer must check
+ * each one against its own candidate, so a flaw spotted in a losing sibling
+ * can't slip through in the winner.
+ */
+async function siblingFindings(c: Ctx, node: NodeState, self: Attempt): Promise<string> {
+  const out: string[] = [];
+  for (const o of node.attempts) {
+    if (o === self || !o.review || (o.reviewVerdict !== "concerns" && o.reviewVerdict !== "fail")) continue;
+    const text = await readFile(join(c.store.runDir(c.run.id), o.review), "utf8").catch(() => "");
+    const issues = /ISSUES:([\s\S]*)/i.exec(text)?.[1] ?? text;
+    out.push(`From the review of a${o.n}:\n${tail(issues.trim(), 4000)}`);
+  }
+  return out.join("\n\n");
 }
 
 async function reviewCandidates(c: Ctx, node: NodeState): Promise<void> {
@@ -336,7 +361,9 @@ async function reviewCandidates(c: Ctx, node: NodeState): Promise<void> {
     const pick = reviewers.find((r) => r !== a.worker) ?? reviewers[i % reviewers.length]!;
     c.say(`  ${node.id}/a${a.n}: review by ${pick}`);
     const diff = await diffText(c.store.root, node.base!, a.commit!);
-    const res = await runWorker(pick, getWorker(c.cfg, pick), { prompt: reviewerPrompt(c.run, node, tail(diff, 60_000)), cwd: a.worktree });
+    const siblings = await siblingFindings(c, node, a);
+    const res = await runWorker(pick, getWorker(c.cfg, pick), { prompt: reviewerPrompt(c.run, node, tail(diff, 60_000), siblings), cwd: a.worktree });
+    a.usage = addUsage(a.usage, res);
     await resetWorktree(a.worktree);
     const file = logPath(c, node.id, a.n, "review.md");
     await writeLog(file, `# Review of ${node.id}/a${a.n} by ${pick}\n\n${res.ok ? res.text : `reviewer failed: ${res.stderr}`}\n`);
@@ -376,9 +403,42 @@ async function settleNode(c: Ctx, node: NodeState): Promise<void> {
   }
 }
 
+/**
+ * After hardening, bring every gradable attempt onto the new base (which only
+ * adds test files, so the merge is clean) and run the gates again. Attempts
+ * that now fail go through the normal repair loop.
+ */
+async function regateLeaf(c: Ctx, node: NodeState): Promise<void> {
+  const newBase = c.run.approval!.baseCommit;
+  node.base = newBase;
+  c.say(`  ${node.id}: re-verifying ${node.attempts.length} attempt(s) against hardened tests`);
+  for (const a of node.attempts) {
+    if (!a.commit || (a.status !== "passed" && a.status !== "failed")) continue;
+    try {
+      if (!a.worktree || !existsSync(a.worktree)) {
+        a.worktree = wtPath(c, node.id, `a${a.n}`);
+        await prepareWorktree(c, a.worktree, a.branch, a.commit);
+      }
+      if (!(await mergeCommit(a.worktree, newBase, `graftree ${c.run.id}: hardened tests for ${node.id}`))) {
+        throw new GraftreeError("could not merge hardened tests into this attempt", "merge");
+      }
+      a.commit = await git(a.worktree, ["rev-parse", "HEAD"]);
+      await gateAttempt(c, node, a, a.worktree);
+      a.score = a.status === "passed" ? score(a) : undefined;
+    } catch (e) {
+      a.status = "error";
+      a.notes = (e as Error).message;
+    }
+    c.say(`  ${node.id}/a${a.n}: ${a.status} (hardened)`);
+    await c.save();
+  }
+  node.regate = false;
+}
+
 async function solveLeaf(c: Ctx, node: NodeState): Promise<void> {
   node.status = "solving";
   node.base ??= c.run.approval!.baseCommit;
+  if (node.regate) await regateLeaf(c, node);
   node.targetAttempts ??= attemptsPerLeaf(c);
   const pool = c.cfg.roles.solver;
   const jobs: Promise<void>[] = [];
@@ -464,6 +524,7 @@ export interface Decision {
 export interface RunSummary {
   run: string;
   status: RunStatus;
+  usage: ReturnType<typeof runUsage>;
   decisions: Decision[];
   next: string;
 }
@@ -494,7 +555,7 @@ export function summarize(run: Run): RunSummary {
         : run.status === "done"
           ? `merge branch ${run.final?.branch}`
           : `graftree run ${run.id}`;
-  return { run: run.id, status: run.status, decisions, next };
+  return { run: run.id, status: run.status, usage: runUsage(run), decisions, next };
 }
 
 /**
@@ -664,6 +725,89 @@ export async function addExternalAttempt(
     run.status = "awaiting_closer";
     await store.saveRun(run);
     return a;
+  });
+}
+
+async function listFiles(dir: string, prefix = ""): Promise<string[]> {
+  const out: string[] = [];
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${e.name}` : e.name;
+    if (e.isDirectory()) out.push(...(await listFiles(join(dir, e.name), rel)));
+    else if (e.isFile()) out.push(rel);
+  }
+  return out;
+}
+
+export interface HardenInput {
+  /** Directory mirroring repo-relative paths, holding the NEW test files. */
+  testsFrom: string;
+  /** Command that runs the new tests; must exit 0 for the node to count as done. */
+  command: string;
+  /** The review finding(s) these tests pin down. Goes into the report. */
+  reason: string;
+}
+
+/**
+ * Add tests after approval, from real review findings. Strictly additive:
+ * new files only, never touching locked tests, so the bar can only rise.
+ * The run base moves forward (old base + new tests), the new files are locked,
+ * the node re-verifies its attempts (repairing ones that now fail), and every
+ * ancestor re-integrates on the new base.
+ */
+export async function harden(store: Store, runId: string | undefined, nodeId: string, input: HardenInput): Promise<Run> {
+  const id = (await store.loadRun(runId)).id;
+  return withRunLock(store, id, async () => {
+    const run = await store.loadRun(id);
+    if (!run.approval || !["approved", "solving", "awaiting_closer", "ready_to_close"].includes(run.status)) {
+      throw new GraftreeError(`run ${id} is "${run.status}"; hardening needs an approved, unfinished run`, "bad_status");
+    }
+    const node = run.nodes[nodeId];
+    if (!node) throw new GraftreeError(`unknown node "${nodeId}"`, "invalid");
+    if (!input.reason.trim()) throw new GraftreeError("harden needs --reason (the finding these tests pin down)", "invalid");
+    if (!input.command.trim()) throw new GraftreeError("harden needs --command to run the new tests", "invalid");
+    if (!existsSync(input.testsFrom)) throw new GraftreeError(`tests dir not found: ${input.testsFrom}`, "invalid");
+
+    const files = (await listFiles(input.testsFrom)).map(normalizeRepoPath).sort();
+    if (!files.length) throw new GraftreeError(`no test files in ${input.testsFrom}`, "invalid");
+    const locked = new Set(run.approval.locked.map((l) => l.path));
+    const oldBase = run.approval.baseCommit;
+    for (const f of files) {
+      if (locked.has(f)) throw new GraftreeError(`${f} is a locked acceptance test; hardening only adds new files`, "invalid");
+      const exists = await git(store.root, ["cat-file", "-e", `${oldBase}:${f}`]).then(() => true, () => false);
+      if (exists) throw new GraftreeError(`${f} already exists in the run base; hardening only adds new files`, "invalid");
+    }
+
+    const { commit } = await commitOverlay(
+      store.root,
+      files.map((f) => ({ repoPath: f, sourcePath: join(input.testsFrom, f) })),
+      `graftree: hardening tests for ${id} ${nodeId}\n\n${input.reason.trim()}`,
+      run.approval.baseRef,
+      oldBase,
+    );
+    for (const f of files) run.approval.locked.push({ path: f, sha256: await sha256File(join(input.testsFrom, f)) });
+    run.approval.baseCommit = commit;
+    await mkdir(store.testsDir(id), { recursive: true });
+    await cp(input.testsFrom, store.testsDir(id), { recursive: true });
+
+    for (const target of [node, run.plan?.nodes.find((n) => n.id === nodeId)]) {
+      if (!target) continue;
+      target.acceptance.files = [...new Set([...target.acceptance.files, ...files])];
+      target.acceptance.extraCommands = [...new Set([...target.acceptance.extraCommands, input.command.trim()])];
+    }
+    run.hardening.push({ at: now(), node: nodeId, files, command: input.command.trim(), reason: input.reason.trim(), baseCommit: commit });
+
+    Object.assign(node, { winner: null, recommended: null, decidedBy: null, awaiting: undefined, status: "planned" });
+    if (node.kind === "leaf") node.regate = true;
+    else {
+      // A split re-integrates its children's winners on the new base.
+      for (const a of node.attempts) if (a.worktree) await removeWorktree(store.root, a.worktree);
+      Object.assign(node, { base: null, attempts: [] });
+    }
+    await resetAncestors(store, run, nodeId);
+    logEvent(run, "hardened", `${nodeId}: +${files.length} test file(s): ${input.reason.trim()}`);
+    run.status = "solving";
+    await store.saveRun(run);
+    return run;
   });
 }
 

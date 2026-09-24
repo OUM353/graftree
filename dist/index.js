@@ -9,8 +9,9 @@ export { runWorker } from "./workers/index.js";
 export { runApiAgent, executeTool, AGENT_TOOLS } from "./workers/api-agent.js";
 export { matchesPath, globToRegExp } from "./glob.js";
 export { parseNdjson, renderArgv } from "./workers/cli.js";
-export { runTree, decide, retry, addExternalAttempt, attemptDiff, summarize, removeRunWorktrees } from "./solve.js";
+export { runTree, decide, retry, harden, addExternalAttempt, attemptDiff, summarize, removeRunWorktrees } from "./solve.js";
 export { closeRun } from "./close.js";
 export { solverPrompt, repairPrompt, integratorPrompt, reviewerPrompt } from "./prompts.js";
+export { normalizeUsage, addUsage, sumUsage, runUsage, formatUsage } from "./usage.js";
 export { GraftreeError } from "./util.js";
 //# sourceMappingURL=index.js.map

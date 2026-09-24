@@ -152,6 +152,13 @@
                       },
                       "rubric": {
                         "type": "string"
+                      },
+                      "extraCommands": {
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
                       }
                     },
                     "required": [
@@ -274,6 +281,13 @@
               },
               "rubric": {
                 "type": "string"
+              },
+              "extraCommands": {
+                "default": [],
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -559,6 +573,37 @@
                     "unknown"
                   ]
                 },
+                "usage": {
+                  "type": "object",
+                  "properties": {
+                    "calls": {
+                      "default": 0,
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "inputTokens": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "outputTokens": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "cacheReadTokens": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "durationMs": {
+                      "default": 0,
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
+                },
                 "notes": {
                   "type": "string"
                 }
@@ -611,6 +656,10 @@
           },
           "awaiting": {
             "type": "string"
+          },
+          "regate": {
+            "default": false,
+            "type": "boolean"
           }
         },
         "required": [
@@ -757,6 +806,75 @@
           "type": "null"
         }
       ]
+    },
+    "hardening": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "node": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "command": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "baseCommit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "node",
+          "files",
+          "command",
+          "reason",
+          "baseCommit"
+        ]
+      }
+    },
+    "overheadUsage": {
+      "type": "object",
+      "properties": {
+        "calls": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "inputTokens": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0
+        },
+        "outputTokens": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0
+        },
+        "cacheReadTokens": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0
+        },
+        "durationMs": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0
+        }
+      }
     },
     "history": {
       "default": [],

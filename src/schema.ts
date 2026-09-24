@@ -126,6 +126,8 @@ export const Acceptance = z.object({
   command: z.string().min(1),
   /** For goals tests cannot fully express; judged by reviewer, then the closer. */
   rubric: z.string().optional(),
+  /** Commands added by hardening after approval; all must exit 0 as well. */
+  extraCommands: z.array(z.string()).default([]),
 });
 
 export const PlanNode = z.object({
@@ -202,6 +204,16 @@ export const Gates = z.object({
 });
 export type Gates = z.infer<typeof Gates>;
 
+/** Token/call accounting, normalized across worker types. */
+export const Usage = z.object({
+  calls: z.number().int().nonnegative().default(0),
+  inputTokens: z.number().nonnegative().default(0),
+  outputTokens: z.number().nonnegative().default(0),
+  cacheReadTokens: z.number().nonnegative().default(0),
+  durationMs: z.number().nonnegative().default(0),
+});
+export type Usage = z.infer<typeof Usage>;
+
 export const Attempt = z.object({
   n: z.number().int().positive(),
   kind: z.enum(["solve", "integrate", "external"]),
@@ -221,6 +233,8 @@ export const Attempt = z.object({
   /** Review text path (relative to the run dir), when a reviewer ran. */
   review: z.string().optional(),
   reviewVerdict: z.enum(["pass", "concerns", "fail", "unknown"]).optional(),
+  /** All worker calls spent on this attempt: solve, repairs, reviews. */
+  usage: Usage.optional(),
   notes: z.string().optional(),
 });
 export type Attempt = z.infer<typeof Attempt>;
@@ -239,6 +253,8 @@ export const NodeState = PlanNode.extend({
   decisionNotes: z.string().optional(),
   /** Why the node is waiting on the closer. */
   awaiting: z.string().optional(),
+  /** Set by hardening: existing attempts must be brought onto the new base and re-gated. */
+  regate: z.boolean().default(false),
 });
 export type NodeState = z.infer<typeof NodeState>;
 
@@ -283,6 +299,21 @@ export const Run = z.object({
     })
     .nullable()
     .default(null),
+  /** Tests added after approval from review findings. Additive only: they never replace locked tests. */
+  hardening: z
+    .array(
+      z.object({
+        at: z.string(),
+        node: z.string(),
+        files: z.array(z.string()),
+        command: z.string(),
+        reason: z.string(),
+        baseCommit: z.string(),
+      }),
+    )
+    .default([]),
+  /** Worker calls not tied to an attempt (e.g. planning). */
+  overheadUsage: Usage.optional(),
   history: z.array(HistoryEntry).default([]),
 });
 export type Run = z.infer<typeof Run>;

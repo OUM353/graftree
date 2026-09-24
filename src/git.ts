@@ -52,8 +52,9 @@ export async function commitOverlay(
   files: { repoPath: string; sourcePath: string }[],
   message: string,
   ref: string,
+  parentCommit?: string,
 ): Promise<{ commit: string; parent: string }> {
-  const parent = await headCommit(root);
+  const parent = parentCommit ?? (await headCommit(root));
   const tmp = await mkdtemp(join(tmpdir(), "graftree-index-"));
   const env = { GIT_INDEX_FILE: join(tmp, "index") };
   try {

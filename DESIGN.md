@@ -280,6 +280,7 @@ graftree retry NODE [--count N]            # more engine attempts for a leaf
 graftree attempt NODE --worktree P | --commit REV   # closer-made candidate, same gates
 graftree close [run]                       # final checks → graftree/<run>/final + report.md
 graftree clean [run]                       # remove worktrees (branches kept)
+graftree harden NODE --tests DIR --command "…" --reason "…" --yes   # v0.3: tests from review findings
 ```
 
 Engine details:
@@ -337,6 +338,26 @@ Claude Code skill, and the report.
 **Later:** more CLI templates after their flags are verified (CommandCode and
 others), a live tree viewer, cost-aware worker routing, and a benchmark harness
 (e.g. SWE-bench-style tasks) that measures accuracy against single-agent baselines.
+
+## 8b. Hardening, cross-checked reviews, cost (v0.3)
+
+- **Hardening.** Tests are added after approval, from real review findings.
+  - The new files are committed on top of the current run base, so the base moves
+    forward and the originally approved tests are never touched.
+  - The new files are locked, and their command is added to the node's
+    `acceptance.extraCommands`.
+  - A hardened leaf merges the new base into each existing attempt (a clean,
+    add-only merge) and re-runs the gates. Failures get a fresh repair budget.
+  - A hardened split re-integrates, and every ancestor re-integrates as well.
+  - The lock check compares each candidate against its own node base.
+- **Cross-checked reviews.** Reviewing continues until the top-ranked candidate
+  is a reviewed one. Every reviewer receives the issues found on sibling attempts
+  and must mark each one as applying or not. A repair clears the attempt's old
+  review.
+- **Cost.** Worker usage is normalized across CommandCode, Claude and
+  OpenAI-style APIs into calls, tokens in and out, cached tokens and time. It is
+  recorded per attempt (plus planning overhead) and summed in `run`, `show` and
+  the report.
 
 ## 9. Decisions made
 

@@ -115,6 +115,7 @@ export declare const Acceptance: z.ZodObject<{
     files: z.ZodDefault<z.ZodArray<z.ZodString>>;
     command: z.ZodString;
     rubric: z.ZodOptional<z.ZodString>;
+    extraCommands: z.ZodDefault<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>;
 export declare const PlanNode: z.ZodObject<{
     id: z.ZodString;
@@ -134,6 +135,7 @@ export declare const PlanNode: z.ZodObject<{
         files: z.ZodDefault<z.ZodArray<z.ZodString>>;
         command: z.ZodString;
         rubric: z.ZodOptional<z.ZodString>;
+        extraCommands: z.ZodDefault<z.ZodArray<z.ZodString>>;
     }, z.core.$strip>;
     dependsOn: z.ZodDefault<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>;
@@ -164,6 +166,7 @@ export declare const Plan: z.ZodObject<{
             files: z.ZodDefault<z.ZodArray<z.ZodString>>;
             command: z.ZodString;
             rubric: z.ZodOptional<z.ZodString>;
+            extraCommands: z.ZodDefault<z.ZodArray<z.ZodString>>;
         }, z.core.$strip>;
         dependsOn: z.ZodDefault<z.ZodArray<z.ZodString>>;
     }, z.core.$strip>>;
@@ -234,6 +237,15 @@ export declare const Gates: z.ZodObject<{
     }, z.core.$strip>>;
 }, z.core.$strip>;
 export type Gates = z.infer<typeof Gates>;
+/** Token/call accounting, normalized across worker types. */
+export declare const Usage: z.ZodObject<{
+    calls: z.ZodDefault<z.ZodNumber>;
+    inputTokens: z.ZodDefault<z.ZodNumber>;
+    outputTokens: z.ZodDefault<z.ZodNumber>;
+    cacheReadTokens: z.ZodDefault<z.ZodNumber>;
+    durationMs: z.ZodDefault<z.ZodNumber>;
+}, z.core.$strip>;
+export type Usage = z.infer<typeof Usage>;
 export declare const Attempt: z.ZodObject<{
     n: z.ZodNumber;
     kind: z.ZodEnum<{
@@ -300,6 +312,13 @@ export declare const Attempt: z.ZodObject<{
         concerns: "concerns";
         fail: "fail";
     }>>;
+    usage: z.ZodOptional<z.ZodObject<{
+        calls: z.ZodDefault<z.ZodNumber>;
+        inputTokens: z.ZodDefault<z.ZodNumber>;
+        outputTokens: z.ZodDefault<z.ZodNumber>;
+        cacheReadTokens: z.ZodDefault<z.ZodNumber>;
+        durationMs: z.ZodDefault<z.ZodNumber>;
+    }, z.core.$strip>>;
     notes: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export type Attempt = z.infer<typeof Attempt>;
@@ -321,6 +340,7 @@ export declare const NodeState: z.ZodObject<{
         files: z.ZodDefault<z.ZodArray<z.ZodString>>;
         command: z.ZodString;
         rubric: z.ZodOptional<z.ZodString>;
+        extraCommands: z.ZodDefault<z.ZodArray<z.ZodString>>;
     }, z.core.$strip>;
     dependsOn: z.ZodDefault<z.ZodArray<z.ZodString>>;
     status: z.ZodEnum<{
@@ -403,6 +423,13 @@ export declare const NodeState: z.ZodObject<{
             concerns: "concerns";
             fail: "fail";
         }>>;
+        usage: z.ZodOptional<z.ZodObject<{
+            calls: z.ZodDefault<z.ZodNumber>;
+            inputTokens: z.ZodDefault<z.ZodNumber>;
+            outputTokens: z.ZodDefault<z.ZodNumber>;
+            cacheReadTokens: z.ZodDefault<z.ZodNumber>;
+            durationMs: z.ZodDefault<z.ZodNumber>;
+        }, z.core.$strip>>;
         notes: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>>;
     recommended: z.ZodDefault<z.ZodNullable<z.ZodNumber>>;
@@ -410,6 +437,7 @@ export declare const NodeState: z.ZodObject<{
     decidedBy: z.ZodDefault<z.ZodNullable<z.ZodString>>;
     decisionNotes: z.ZodOptional<z.ZodString>;
     awaiting: z.ZodOptional<z.ZodString>;
+    regate: z.ZodDefault<z.ZodBoolean>;
 }, z.core.$strip>;
 export type NodeState = z.infer<typeof NodeState>;
 export declare const LockedFile: z.ZodObject<{
@@ -470,6 +498,7 @@ export declare const Run: z.ZodObject<{
                 files: z.ZodDefault<z.ZodArray<z.ZodString>>;
                 command: z.ZodString;
                 rubric: z.ZodOptional<z.ZodString>;
+                extraCommands: z.ZodDefault<z.ZodArray<z.ZodString>>;
             }, z.core.$strip>;
             dependsOn: z.ZodDefault<z.ZodArray<z.ZodString>>;
         }, z.core.$strip>>;
@@ -492,6 +521,7 @@ export declare const Run: z.ZodObject<{
             files: z.ZodDefault<z.ZodArray<z.ZodString>>;
             command: z.ZodString;
             rubric: z.ZodOptional<z.ZodString>;
+            extraCommands: z.ZodDefault<z.ZodArray<z.ZodString>>;
         }, z.core.$strip>;
         dependsOn: z.ZodDefault<z.ZodArray<z.ZodString>>;
         status: z.ZodEnum<{
@@ -574,6 +604,13 @@ export declare const Run: z.ZodObject<{
                 concerns: "concerns";
                 fail: "fail";
             }>>;
+            usage: z.ZodOptional<z.ZodObject<{
+                calls: z.ZodDefault<z.ZodNumber>;
+                inputTokens: z.ZodDefault<z.ZodNumber>;
+                outputTokens: z.ZodDefault<z.ZodNumber>;
+                cacheReadTokens: z.ZodDefault<z.ZodNumber>;
+                durationMs: z.ZodDefault<z.ZodNumber>;
+            }, z.core.$strip>>;
             notes: z.ZodOptional<z.ZodString>;
         }, z.core.$strip>>>;
         recommended: z.ZodDefault<z.ZodNullable<z.ZodNumber>>;
@@ -581,6 +618,7 @@ export declare const Run: z.ZodObject<{
         decidedBy: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         decisionNotes: z.ZodOptional<z.ZodString>;
         awaiting: z.ZodOptional<z.ZodString>;
+        regate: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>>;
     feedback: z.ZodDefault<z.ZodArray<z.ZodObject<{
         at: z.ZodString;
@@ -608,6 +646,21 @@ export declare const Run: z.ZodObject<{
             violations: z.ZodDefault<z.ZodArray<z.ZodString>>;
         }, z.core.$strip>>;
     }, z.core.$strip>>>;
+    hardening: z.ZodDefault<z.ZodArray<z.ZodObject<{
+        at: z.ZodString;
+        node: z.ZodString;
+        files: z.ZodArray<z.ZodString>;
+        command: z.ZodString;
+        reason: z.ZodString;
+        baseCommit: z.ZodString;
+    }, z.core.$strip>>>;
+    overheadUsage: z.ZodOptional<z.ZodObject<{
+        calls: z.ZodDefault<z.ZodNumber>;
+        inputTokens: z.ZodDefault<z.ZodNumber>;
+        outputTokens: z.ZodDefault<z.ZodNumber>;
+        cacheReadTokens: z.ZodDefault<z.ZodNumber>;
+        durationMs: z.ZodDefault<z.ZodNumber>;
+    }, z.core.$strip>>;
     history: z.ZodDefault<z.ZodArray<z.ZodObject<{
         at: z.ZodString;
         event: z.ZodString;

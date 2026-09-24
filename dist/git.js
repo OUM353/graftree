@@ -40,8 +40,8 @@ export async function headCommit(root) {
  * Create a commit = HEAD + the given files, without touching the user's
  * working tree, index, or current branch (uses a throwaway index file).
  */
-export async function commitOverlay(root, files, message, ref) {
-    const parent = await headCommit(root);
+export async function commitOverlay(root, files, message, ref, parentCommit) {
+    const parent = parentCommit ?? (await headCommit(root));
     const tmp = await mkdtemp(join(tmpdir(), "graftree-index-"));
     const env = { GIT_INDEX_FILE: join(tmp, "index") };
     try {

@@ -16,20 +16,26 @@ const w = (p, s) => { mkdirSync(p.split("/").slice(0, -1).join("/") || ".", { re
 const node = /Your node: (\S+)/.exec(prompt)?.[1];
 const repairing = prompt.includes("REPAIRING");
 const good = {
-  parser: () => w("src/parser/index.mjs", "export const parse = (s) => { const [a, b] = s.split('+').map(Number); return { op: '+', a, b }; };\n"),
+  // A repair pass also marks the parser "hardened", so hardening tests can require it.
+  parser: () => w("src/parser/index.mjs", "export const parse = (s) => { const [a, b] = s.split('+').map(Number); return { op: '+', a, b }; };\n" + (repairing ? "parse.hardened = true;\n" : "")),
   eval: () => w("src/eval/index.mjs", "export const evaluate = (t) => t.a + t.b;\n"),
 };
 const bad = {
   parser: () => w("src/parser/index.mjs", "export const parse = () => ({});\n"),
   eval: () => w("src/eval/index.mjs", "export const evaluate = () => 0;\n"),
 };
-if (behavior === "critic") { console.log(JSON.stringify({ type: "result", result: "VERDICT: concerns\nISSUES:\n- [severity medium] x" })); process.exit(0); }
+const USAGE = { inputTokens: 1000, outputTokens: 50 };
+if (behavior === "critic") {
+  const saw = prompt.includes("SIBLING FINDINGS") ? "saw-siblings" : "no-siblings";
+  console.log(JSON.stringify({ type: "result", result: "VERDICT: concerns\nISSUES:\n- [severity medium] huge input overflows (" + saw + ")", usage: USAGE }));
+  process.exit(0);
+}
 if (behavior === "review") { console.log(JSON.stringify({ type: "result", result: "VERDICT: pass\nISSUES: none" })); process.exit(0); }
 if (behavior === "good" || (behavior === "fixer" && repairing)) good[node]();
 else if (behavior === "bad" || behavior === "fixer") bad[node]();
 else if (behavior === "cheat") { bad[node](); w("test/" + node + ".test.mjs", "// no assertions\n"); }
 else if (behavior === "sprawl") { good[node](); w("src/unrelated.mjs", "export {};\n"); }
-console.log(JSON.stringify({ type: "result", result: behavior + " done on " + node }));
+console.log(JSON.stringify({ type: "result", result: behavior + " done on " + node, usage: USAGE }));
 `;
 
 const t = (file: string, body: string) => ({ file, body });

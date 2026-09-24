@@ -161,7 +161,7 @@ export function checkPlan(input: unknown, opts: { testsDir?: string } = {}): Pla
 export function nodesFromPlan(plan: Plan): Record<string, NodeState> {
   const out: Record<string, NodeState> = {};
   for (const n of plan.nodes) {
-    out[n.id] = { ...n, status: "planned", base: null, targetAttempts: null, attempts: [], recommended: null, winner: null, decidedBy: null };
+    out[n.id] = { ...n, status: "planned", base: null, targetAttempts: null, attempts: [], recommended: null, winner: null, decidedBy: null, regate: false };
   }
   return out;
 }
@@ -210,6 +210,7 @@ export function renderPlanMarkdown(run: Run, cfg: Config): string {
     if (n.contract.consumes.length) md.push(`- **Consumes:**`, ...n.contract.consumes.map((c) => `  - \`${c}\``));
     if (n.dependsOn.length) md.push(`- **Depends on:** ${n.dependsOn.join(", ")}`);
     md.push(`- **Acceptance:** \`${n.acceptance.command}\``);
+    for (const c of n.acceptance.extraCommands) md.push(`  - hardening: \`${c}\``);
     for (const f of n.acceptance.files) md.push(`  - test: \`${f}\` (draft: \`tests/${f}\`)`);
     if (n.acceptance.rubric) md.push(`  - rubric: ${n.acceptance.rubric}`);
     md.push("");

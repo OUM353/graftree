@@ -1,5 +1,6 @@
 import { type Attempt, type NodeState, type Run, type RunStatus } from "./schema.js";
 import { type Store } from "./store.js";
+import { runUsage } from "./usage.js";
 export interface RunOptions {
     /** Override config budgets.autoSelect (headless use). */
     autoSelect?: boolean;
@@ -27,6 +28,7 @@ export interface Decision {
 export interface RunSummary {
     run: string;
     status: RunStatus;
+    usage: ReturnType<typeof runUsage>;
     decisions: Decision[];
     next: string;
 }
@@ -50,6 +52,22 @@ export declare function addExternalAttempt(store: Store, runId: string | undefin
     commit?: string;
     notes?: string;
 }): Promise<Attempt>;
+export interface HardenInput {
+    /** Directory mirroring repo-relative paths, holding the NEW test files. */
+    testsFrom: string;
+    /** Command that runs the new tests; must exit 0 for the node to count as done. */
+    command: string;
+    /** The review finding(s) these tests pin down. Goes into the report. */
+    reason: string;
+}
+/**
+ * Add tests after approval, from real review findings. Strictly additive:
+ * new files only, never touching locked tests, so the bar can only rise.
+ * The run base moves forward (old base + new tests), the new files are locked,
+ * the node re-verifies its attempts (repairing ones that now fail), and every
+ * ancestor re-integrates on the new base.
+ */
+export declare function harden(store: Store, runId: string | undefined, nodeId: string, input: HardenInput): Promise<Run>;
 export declare function attemptDiff(store: Store, runId: string | undefined, nodeId: string, n: number): Promise<string>;
 export declare function removeRunWorktrees(store: Store, run: Run): Promise<void>;
 export declare const _test: {
