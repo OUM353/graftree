@@ -1,0 +1,16 @@
+// Public library API: embed graftree's protocol and engine in other tools.
+export * from "./schema.js";
+export { loadConfig, getWorker, workersForRole } from "./config.js";
+export { Store, GRAFTREE_DIR } from "./store.js";
+export { checkPlan, nodesFromPlan, renderPlanMarkdown, renderTree, allAcceptanceFiles, type PlanCheck } from "./plan.js";
+export { newRun, submitPlan, planWithWorker, approveRun, rejectRun, checkLocked, type LockViolation } from "./lifecycle.js";
+export { plannerPrompt, planJsonSchema, PLANNER_OUT_DIR } from "./prompts.js";
+export { runWorker, type WorkerResult, type WorkerTask } from "./workers/index.js";
+export { runApiAgent, executeTool, AGENT_TOOLS } from "./workers/api-agent.js";
+export { matchesPath, globToRegExp } from "./glob.js";
+export { parseNdjson, renderArgv } from "./workers/cli.js";
+export { runTree, decide, retry, harden, type HardenInput, addExternalAttempt, attemptDiff, summarize, removeRunWorktrees, type RunOptions, type RunSummary, type Decision } from "./solve.js";
+export { closeRun, type CloseResult } from "./close.js";
+export { solverPrompt, repairPrompt, integratorPrompt, reviewerPrompt } from "./prompts.js";
+export { normalizeUsage, addUsage, sumUsage, runUsage, formatUsage } from "./usage.js";
+export { GraftreeError } from "./util.js";

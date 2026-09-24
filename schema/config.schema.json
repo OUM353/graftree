@@ -1,0 +1,247 @@
+{
+  "$id": "https://github.com/oum353/agent-tree/schema/config.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "workers": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "cli"
+              },
+              "command": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "model": {
+                "type": "string"
+              },
+              "output": {
+                "default": "text",
+                "type": "string",
+                "enum": [
+                  "text",
+                  "ndjson"
+                ]
+              },
+              "timeoutSec": {
+                "default": 1800,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "env": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "command"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "openai-compatible"
+              },
+              "baseUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "model": {
+                "type": "string"
+              },
+              "apiKeyEnv": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "maxTokens": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "maxTurns": {
+                "default": 60,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "timeoutSec": {
+                "default": 1800,
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "baseUrl",
+              "model"
+            ]
+          }
+        ]
+      }
+    },
+    "roles": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "planner": {
+          "default": [
+            "closer"
+          ],
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "test_writer": {
+          "default": [
+            "closer"
+          ],
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "solver": {
+          "default": [
+            "closer"
+          ],
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "integrator": {
+          "default": [
+            "closer"
+          ],
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reviewer": {
+          "default": [
+            "closer"
+          ],
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "budgets": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "attemptsPerLeaf": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxRepairRounds": {
+          "default": 2,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxRedecompositions": {
+          "default": 1,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxWallMinutes": {
+          "default": 240,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "concurrency": {
+          "default": 3,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "autoSelect": {
+          "default": false,
+          "type": "boolean"
+        }
+      }
+    },
+    "ignore": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "commands": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "test": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        },
+        "lint": {
+          "type": "string"
+        },
+        "setup": {
+          "type": "string"
+        },
+        "timeoutSec": {
+          "default": 900,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    }
+  },
+  "required": [
+    "version"
+  ]
+}
