@@ -56,6 +56,7 @@ test("examples/minisheet: starter tests pass, holdout grades the untouched start
   const graded = spawnSync(process.execPath, ["examples/minisheet/grade.mjs", dir], { env, encoding: "utf8" });
   assert.equal(graded.status, 1);
   assert.match(graded.stdout, /holdout: 1\/38 passed/);
+  assert.match(graded.stdout, /strict: 2\/88 passed/);
   rmSync(join(dir, ".."), { recursive: true, force: true });
 });
 
