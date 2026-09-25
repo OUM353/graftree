@@ -12,10 +12,51 @@ export function cleanEnv(extra) {
     delete env.NODE_TEST_CONTEXT;
     return env;
 }
+const live = new Set();
+/** Remember a running child, so it can be stopped with everything it started. */
+export function track(child) {
+    live.add(child);
+    child.once("close", () => live.delete(child));
+    child.once("error", () => live.delete(child));
+}
+/**
+ * Stop a child and every process it started, so nothing keeps running (or
+ * editing a worktree) after a timeout. On POSIX the child must have been
+ * spawned with `detached: true`, making it a process-group leader; on Windows
+ * the tree is killed with taskkill.
+ */
+export function killTree(child, sig = "SIGTERM") {
+    // Don't skip a child that already exited: on POSIX its group may still hold a
+    // process that keeps the output pipes open, and killing the group ends it.
+    if (child.pid === undefined)
+        return;
+    try {
+        if (process.platform === "win32") {
+            spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }).on("error", () => child.kill(sig));
+        }
+        else {
+            process.kill(-child.pid, sig);
+        }
+    }
+    catch {
+        try {
+            child.kill(sig);
+        }
+        catch {
+            /* already gone */
+        }
+    }
+}
+/** Stop every tracked child and its descendants (e.g. when graftree itself is interrupted). */
+export function killTrackedChildren(sig = "SIGTERM") {
+    for (const c of live)
+        killTree(c, sig);
+}
 /** Run a shell command (the user's configured test/build commands) with a timeout. */
 export function runShell(command, cwd, timeoutSec, env) {
     return new Promise((resolve) => {
-        const child = spawn(command, { cwd, shell: true, env: cleanEnv(env), stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+        const child = spawn(command, { cwd, shell: true, env: cleanEnv(env), stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32", windowsHide: true });
+        track(child);
         let output = "";
         let timedOut = false;
         const cap = (d) => {
@@ -25,21 +66,10 @@ export function runShell(command, cwd, timeoutSec, env) {
         };
         child.stdout.on("data", cap);
         child.stderr.on("data", cap);
-        const kill = (sig) => {
-            try {
-                if (child.pid && process.platform !== "win32")
-                    process.kill(-child.pid, sig);
-                else
-                    child.kill(sig);
-            }
-            catch {
-                /* already gone */
-            }
-        };
         const timer = setTimeout(() => {
             timedOut = true;
-            kill("SIGTERM");
-            setTimeout(() => kill("SIGKILL"), 5000).unref();
+            killTree(child, "SIGTERM");
+            setTimeout(() => killTree(child, "SIGKILL"), 5000).unref();
         }, timeoutSec * 1000);
         child.on("error", (e) => {
             clearTimeout(timer);
@@ -57,4 +87,3 @@ export async function writeLog(path, content) {
 }
 /** Last `n` characters, for feeding failure output back to a worker. */
 export const tail = (s, n = 6000) => (s.length > n ? `…(truncated)…\n${s.slice(-n)}` : s);
-//# sourceMappingURL=exec.js.map

@@ -1,9 +1,9 @@
 # Example: minisheet (a hard benchmark)
 
 [kvstore](../kvstore/) turned out to be too easy: a single DeepSeek agent and a
-graftree run both scored 25/25. This benchmark is built to separate them. It
-asks for a small spreadsheet engine, and the spec is full of rules that
-interact and are easy to get subtly wrong:
+graftree run both scored 25/25. This benchmark was built to try to separate
+them (the results are at the end). It asks for a small spreadsheet engine, and
+the spec is full of rules that interact and are easy to get subtly wrong:
 
 - **Precedence:** `-2^2` is 4, and `^` is left-associative.
 - **Numbers:** display and `=` comparisons use 15 significant digits, so

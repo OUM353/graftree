@@ -39,4 +39,3 @@ export function resolveCommand(cmd, env = process.env, platform = process.platfo
     }
     return { file: found, prefixArgs: [] };
 }
-//# sourceMappingURL=resolve-command.js.map

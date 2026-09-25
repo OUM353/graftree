@@ -4,7 +4,7 @@ import { runShell, writeLog } from "./exec.js";
 import { addDetachedWorktree, diffStat, git, removeWorktree } from "./git.js";
 import { renderTree } from "./plan.js";
 import type { CheckResult, Config, Run } from "./schema.js";
-import { removeRunWorktrees } from "./solve.js";
+import { removeRunWorktrees, withRunLock } from "./solve.js";
 import { logEvent, type Store } from "./store.js";
 import { formatUsage, recordedWarnings, runUsage, sumUsage } from "./usage.js";
 import { GraftreeError, logFileName, now, writeFileAtomic } from "./util.js";
@@ -22,7 +22,13 @@ export interface CloseResult {
  * result lands on branch graftree/<run>/final and the run is done.
  */
 export async function closeRun(store: Store, runId: string | undefined, opts: { keepWorktrees?: boolean } = {}): Promise<CloseResult> {
-  const run = await store.loadRun(runId);
+  const id = (await store.loadRun(runId)).id;
+  // Like the other engine commands, close holds the run lock.
+  return withRunLock(store, id, () => closeLocked(store, id, opts));
+}
+
+async function closeLocked(store: Store, id: string, opts: { keepWorktrees?: boolean }): Promise<CloseResult> {
+  const run = await store.loadRun(id);
   if (run.status !== "ready_to_close") {
     throw new GraftreeError(`run ${run.id} is "${run.status}"; close needs "ready_to_close" (every node decided)`, "bad_status");
   }

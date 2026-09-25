@@ -80,12 +80,16 @@ test("estimateWork counts worker calls before anything is spent", () => {
   // Closer in the solver rotation: only the workers' share is counted; repairAll off caps repairs per node.
   const mixed = estimateWork(plan, cfg({ planner: ["w1"], test_writer: ["w1"], solver: ["w1", "closer"], integrator: ["w1"], reviewer: ["w1"] }, { attemptsPerLeaf: 2, maxRepairRounds: 1, repairAll: false }));
   assert.equal(mixed.solverRuns, 2);
-  assert.equal(mixed.minCalls, 2 + 1 + 3);
-  assert.equal(mixed.maxCalls, 2 + 2 + 1 + 5);
+  assert.equal(mixed.minCalls, 2 + 3, "solver runs + one review per node; the split's merge costs no call");
+  assert.equal(mixed.maxCalls, 2 + 2 + 1 + 5, "solves + leaf repairs (one budget per leaf) + split repairs + reviews");
   assert.equal(mixed.closerWorks, true);
 
   // Everything by workers: nothing unmetered, so no closer caveat.
   const all = estimateWork(plan, cfg({ planner: ["w1"], test_writer: ["w1"], solver: ["w1"], integrator: ["w1"], reviewer: ["w1"] }));
   assert.equal(all.closerWorks, false);
   assert.doesNotMatch(estimateNotice(all), /closer/);
+
+  // Only the closer solves: no worker solves, so nothing to repair either.
+  const closerOnly = estimateWork(plan, cfg({}));
+  assert.deepEqual([closerOnly.solverRuns, closerOnly.minCalls, closerOnly.maxCalls], [0, 0, 0]);
 });

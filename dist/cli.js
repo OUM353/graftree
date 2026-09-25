@@ -15,13 +15,14 @@ import { formatUsage, runUsage } from "./usage.js";
 import { Config, Plan, Run, Subtree, Tier } from "./schema.js";
 import { Store } from "./store.js";
 import { GraftreeError } from "./util.js";
+import { killTrackedChildren } from "./exec.js";
 import { runWorker } from "./workers/index.js";
 const HELP = `graftree — tree-structured, test-first, multi-model coding agent engine
 
 Usage: graftree <command> [options]      (add --json for machine-readable output)
 
 Setup
-  init                               Create .graftree/config.yaml in this repo
+  init [--force]                     Create .graftree/config.yaml in this repo (--force: reset it)
   schema [plan|subtree|run|config]   Print a JSON Schema
 
 Plan phase (nothing is spent on solving before approval)
@@ -55,6 +56,10 @@ Checks
   worker test NAME ["prompt"]        Smoke-test a configured worker
 
 [run] / --run default to the most recent run ("latest"). ATTEMPT is a number or aN.
+
+Exit codes: 0 ok · 1 error · 2 not accepted (plan/subtree failed validation, or harden
+without --yes) · 3 lock-check found changed locked tests · 4 attempt did not pass its
+gates · 5 close: final checks failed. With --json, errors print {"ok": false, "error", "code"}.
 `;
 function print(out, human, data) {
     if (out.json)
@@ -77,6 +82,22 @@ function reportPlanCheck(out, run, check, store, cfg, extra = {}) {
     const estimate = estimateWork(check.plan, cfg);
     print(out, `Plan accepted for ${run.id} — status: awaiting_approval\n\n${renderTree(check.plan)}${warn}\n\n${estimateNotice(estimate)}\n\nReview: ${store.planMdPath(run.id)}\nThen:  graftree approve ${run.id}   or   graftree reject ${run.id} --notes "…"`, { ok: true, run: run.id, status: "awaiting_approval", planMd: store.planMdPath(run.id), warnings: check.warnings, estimate, ...extra });
     return 0;
+}
+/** Read a JSON file given on the command line, naming the file if it doesn't parse. */
+async function readJsonFile(path) {
+    const text = await readFile(resolve(path), "utf8");
+    try {
+        return JSON.parse(text);
+    }
+    catch (e) {
+        throw new GraftreeError(`${path} is not valid JSON: ${e.message}`, "invalid");
+    }
+}
+function positiveInt(s, flag) {
+    const n = Number(s);
+    if (!/^\d+$/.test(s.trim()) || !Number.isSafeInteger(n) || n < 1)
+        throw new GraftreeError(`${flag} needs a positive whole number, got "${s}"`, "invalid");
+    return n;
 }
 function attemptNo(s) {
     const n = Number(s.replace(/^a/i, ""));
@@ -180,7 +201,10 @@ async function main(argv) {
             if (values.file && rest.length)
                 throw new GraftreeError('give the problem as text or with --file, not both', "invalid");
             const problem = values.file ? await readFile(resolve(values.file), "utf8") : rest.join(" ");
-            const tier = values.tier ? z.union([Tier, z.literal("auto")]).parse(values.tier) : "auto";
+            const tiers = ["auto", ...Tier.options];
+            if (values.tier && !tiers.includes(values.tier))
+                throw new GraftreeError(`invalid --tier "${values.tier}" (use ${tiers.join(", ")})`, "invalid");
+            const tier = (values.tier ?? "auto");
             const run = await newRun(store, problem, tier);
             print(out, `Created run ${run.id} (tier: ${tier})\nDraft acceptance tests under: ${store.testsDir(run.id)}/<repo-relative path>\nThen submit:  graftree plan ${run.id} --file plan.json   (or --worker NAME)`, { ok: true, run: run.id, status: run.status, testsDir: store.testsDir(run.id), runDir: store.runDir(run.id) });
             return 0;
@@ -198,7 +222,7 @@ async function main(argv) {
             }
             if (!values.file)
                 throw new GraftreeError("plan needs --file plan.json or --worker NAME", "invalid");
-            const planJson = JSON.parse(await readFile(resolve(values.file), "utf8"));
+            const planJson = await readJsonFile(values.file);
             const check = await submitPlan(store, run, planJson, { testsFrom: values.tests ? resolve(values.tests) : undefined });
             return reportPlanCheck(out, run, check, store, await loadConfig(store.configPath));
         }
@@ -264,7 +288,7 @@ async function main(argv) {
             const [node] = rest;
             if (!node)
                 throw new GraftreeError("usage: graftree retry NODE [--count N] [--run R]", "invalid");
-            const run = await retry(store, values.run, node, values.count ? Number(values.count) : 1);
+            const run = await retry(store, values.run, node, values.count ? positiveInt(values.count, "--count") : 1);
             print(out, `${node}: ${run.nodes[node].targetAttempts} attempts targeted. Next: graftree run ${run.id}`, { ok: true, run: run.id, node, targetAttempts: run.nodes[node].targetAttempts });
             return 0;
         }
@@ -301,7 +325,7 @@ async function main(argv) {
             if (!node || !values.file || !values.reason) {
                 throw new GraftreeError('usage: graftree redecompose NODE --file subtree.json [--tests DIR] --reason "…" [--run R]', "invalid");
             }
-            const subtree = JSON.parse(await readFile(resolve(values.file), "utf8"));
+            const subtree = await readJsonFile(values.file);
             const res = await proposeRedecomposition(store, values.run, node, {
                 subtree,
                 testsFrom: values.tests ? resolve(values.tests) : undefined,
@@ -310,7 +334,7 @@ async function main(argv) {
             const warn = res.warnings.length ? `\n${res.warnings.map((w) => `  ! ${w}`).join("\n")}` : "";
             if (!res.plan) {
                 print(out, `Re-decomposition rejected by validation:\n${res.errors.map((e) => `  ✗ ${e}`).join("\n")}${warn}`, { ok: false, errors: res.errors, warnings: res.warnings });
-                return 1;
+                return 2;
             }
             print(out, `Proposed: ${node} becomes a split — awaiting approval${warn}\n\n${renderTree(res.plan)}\n\nReview: ${store.planMdPath(res.run.id)}\nThen:  graftree approve ${res.run.id}   or   graftree reject ${res.run.id} --notes "…"`, { ok: true, run: res.run.id, status: res.run.status, pending: res.run.pendingRedecomposition, warnings: res.warnings });
             return 0;
@@ -367,7 +391,7 @@ async function main(argv) {
                 print(out, `Dropped the proposed re-decomposition; ${run.id} is back to ${run.status}.`, { ok: true, run: run.id, status: run.status });
                 return 0;
             }
-            const run = await rejectRun(store, await store.loadRun(rest[0]), values.notes ?? "");
+            const run = await rejectRun(store, pending, values.notes ?? "");
             print(out, `Rejected ${run.id}; status needs_replan. Feedback will be given to the planner.`, { ok: true, run: run.id, status: run.status });
             return 0;
         }
@@ -395,13 +419,28 @@ async function main(argv) {
             throw new GraftreeError(`unknown command "${cmd}" (see graftree --help)`, "invalid");
     }
 }
-main(process.argv.slice(2)).then((code) => process.exit(code), (e) => {
+/**
+ * Exit once stdout and stderr have drained. process.exit() right after a large
+ * write can cut the output short when stdout is a pipe (asynchronous on some
+ * platforms), which is exactly how an agent reads `--json` output.
+ */
+function exit(code) {
+    process.stdout.write("", () => process.stderr.write("", () => process.exit(code)));
+}
+// Workers and test commands run in their own process groups (so a timeout can stop
+// them whole); on Ctrl-C or SIGTERM, stop them before exiting instead of orphaning them.
+for (const [sig, code] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    process.once(sig, () => {
+        killTrackedChildren("SIGTERM");
+        exit(code);
+    });
+}
+main(process.argv.slice(2)).then(exit, (e) => {
     const json = process.argv.includes("--json");
     const err = e instanceof GraftreeError ? e : new GraftreeError(e.message ?? String(e), "internal");
     if (json)
         process.stdout.write(`${JSON.stringify({ ok: false, error: err.message, code: err.code })}\n`);
     else
         process.stderr.write(`graftree: ${err.message}\n`);
-    process.exit(1);
+    exit(1);
 });
-//# sourceMappingURL=cli.js.map

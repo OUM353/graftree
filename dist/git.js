@@ -112,4 +112,3 @@ export async function resetWorktree(wt) {
     await git(wt, ["reset", "-q", "--hard"]);
     await git(wt, ["clean", "-q", "-fd"]);
 }
-//# sourceMappingURL=git.js.map

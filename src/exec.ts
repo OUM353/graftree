@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -20,10 +20,50 @@ export function cleanEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return env;
 }
 
+const live = new Set<ChildProcess>();
+
+/** Remember a running child, so it can be stopped with everything it started. */
+export function track(child: ChildProcess): void {
+  live.add(child);
+  child.once("close", () => live.delete(child));
+  child.once("error", () => live.delete(child));
+}
+
+/**
+ * Stop a child and every process it started, so nothing keeps running (or
+ * editing a worktree) after a timeout. On POSIX the child must have been
+ * spawned with `detached: true`, making it a process-group leader; on Windows
+ * the tree is killed with taskkill.
+ */
+export function killTree(child: ChildProcess, sig: NodeJS.Signals = "SIGTERM"): void {
+  // Don't skip a child that already exited: on POSIX its group may still hold a
+  // process that keeps the output pipes open, and killing the group ends it.
+  if (child.pid === undefined) return;
+  try {
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }).on("error", () => child.kill(sig));
+    } else {
+      process.kill(-child.pid, sig);
+    }
+  } catch {
+    try {
+      child.kill(sig);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/** Stop every tracked child and its descendants (e.g. when graftree itself is interrupted). */
+export function killTrackedChildren(sig: NodeJS.Signals = "SIGTERM"): void {
+  for (const c of live) killTree(c, sig);
+}
+
 /** Run a shell command (the user's configured test/build commands) with a timeout. */
 export function runShell(command: string, cwd: string, timeoutSec: number, env?: NodeJS.ProcessEnv): Promise<ShellResult> {
   return new Promise((resolve) => {
-    const child = spawn(command, { cwd, shell: true, env: cleanEnv(env), stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+    const child = spawn(command, { cwd, shell: true, env: cleanEnv(env), stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32", windowsHide: true });
+    track(child);
     let output = "";
     let timedOut = false;
     const cap = (d: Buffer) => {
@@ -32,18 +72,10 @@ export function runShell(command: string, cwd: string, timeoutSec: number, env?:
     };
     child.stdout.on("data", cap);
     child.stderr.on("data", cap);
-    const kill = (sig: NodeJS.Signals) => {
-      try {
-        if (child.pid && process.platform !== "win32") process.kill(-child.pid, sig);
-        else child.kill(sig);
-      } catch {
-        /* already gone */
-      }
-    };
     const timer = setTimeout(() => {
       timedOut = true;
-      kill("SIGTERM");
-      setTimeout(() => kill("SIGKILL"), 5000).unref();
+      killTree(child, "SIGTERM");
+      setTimeout(() => killTree(child, "SIGKILL"), 5000).unref();
     }, timeoutSec * 1000);
     child.on("error", (e) => {
       clearTimeout(timer);

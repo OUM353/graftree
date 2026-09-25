@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { OpenAICompatibleWorker } from "../src/schema.js";
 import { executeTool, runApiAgent } from "../src/workers/api-agent.js";
+import { normalizeUsage } from "../src/usage.js";
 
 const worker = OpenAICompatibleWorker.parse({ type: "openai-compatible", baseUrl: "https://x.test/v1", model: "m", maxTurns: 5 });
 
@@ -59,4 +60,23 @@ test("tools cannot escape the worktree or touch .git", async () => {
   await assert.rejects(executeTool(cwd, "write_file", { path: ".git/config", content: "" }), /not allowed/);
   assert.match(await executeTool(cwd, "replace_in_file", { path: "a.txt", old_text: "x", new_text: "y" }), /occurs 2 times/);
   assert.match(await executeTool(cwd, "nope", {}), /unknown tool/);
+});
+
+test("agent loop: a non-JSON reply fails the call instead of crashing; cached tokens are counted", async () => {
+  const cwd = mkdtempSync(join(tmpdir(), "gt-agent-"));
+  const html = (async () => new Response("<html>proxy error</html>", { status: 200 })) as unknown as typeof fetch;
+  const r = await runApiAgent("api", worker, { prompt: "x", cwd }, html);
+  assert.equal(r.ok, false);
+  assert.match(r.stderr, /response is not JSON: <html>/);
+  const usage = { prompt_tokens: 100, completion_tokens: 5, prompt_tokens_details: { cached_tokens: 80 } };
+  const cached = (async () => new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }], usage }))) as unknown as typeof fetch;
+  const r2 = await runApiAgent("api", worker, { prompt: "x", cwd }, cached);
+  assert.equal(r2.ok, true);
+  assert.deepEqual(normalizeUsage(r2.usage), { inputTokens: 100, outputTokens: 5, cacheReadTokens: 80 });
+});
+
+test("tools allow file names that merely start with two dots", async () => {
+  const cwd = mkdtempSync(join(tmpdir(), "gt-agent-"));
+  assert.equal(await executeTool(cwd, "write_file", { path: "..notes.txt", content: "ok" }), "wrote ..notes.txt");
+  await assert.rejects(executeTool(cwd, "read_file", { path: ".." }), /not allowed/);
 });

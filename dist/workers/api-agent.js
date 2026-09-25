@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { git } from "../git.js";
 import { runShell, tail } from "../exec.js";
 const fn = (name, description, properties, required = []) => ({
@@ -27,7 +27,8 @@ export const AGENT_TOOLS = [
 function confine(cwd, p) {
     const abs = resolve(cwd, p || ".");
     const rel = relative(cwd, abs);
-    if (rel.startsWith("..") || rel.split(sep).includes(".git"))
+    // isAbsolute: on Windows a path on another drive has no relative form.
+    if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel) || rel.split(sep).includes(".git"))
         throw new Error(`path not allowed: ${p}`);
     return abs;
 }
@@ -125,10 +126,21 @@ export async function runApiAgent(name, w, task, fetchImpl = fetch) {
         const raw = await res.text();
         if (!res.ok)
             return result(false, "", `HTTP ${res.status}: ${raw.slice(0, 2000)}`, usageTotals);
-        const json = JSON.parse(raw);
+        let json;
+        try {
+            json = JSON.parse(raw);
+        }
+        catch {
+            // e.g. a proxy's HTML error page with status 200
+            return result(false, "", `response is not JSON: ${raw.slice(0, 500)}`, usageTotals);
+        }
         for (const [k, v] of Object.entries(json.usage ?? {}))
             if (typeof v === "number")
                 usageTotals[k] = (usageTotals[k] ?? 0) + v;
+        // OpenAI-style APIs nest cached input tokens; keep them so the report can show them.
+        const cached = json.usage?.prompt_tokens_details?.cached_tokens;
+        if (typeof cached === "number")
+            usageTotals.cacheReadTokens = (usageTotals.cacheReadTokens ?? 0) + cached;
         const msg = json.choices?.[0]?.message;
         if (!msg)
             return result(false, "", `malformed response: ${raw.slice(0, 500)}`, usageTotals);
@@ -161,4 +173,3 @@ export async function runApiAgent(name, w, task, fetchImpl = fetch) {
     }
     return result(false, "", `reached maxTurns (${w.maxTurns}) without finish`, usageTotals);
 }
-//# sourceMappingURL=api-agent.js.map

@@ -215,20 +215,15 @@ export declare const RunStatus: z.ZodEnum<{
     awaiting_closer: "awaiting_closer";
     ready_to_close: "ready_to_close";
     done: "done";
-    failed: "failed";
 }>;
 export type RunStatus = z.infer<typeof RunStatus>;
 export declare const NodeStatus: z.ZodEnum<{
     solving: "solving";
     awaiting_closer: "awaiting_closer";
     done: "done";
-    failed: "failed";
     planned: "planned";
-    verifying: "verifying";
-    selected: "selected";
     integrating: "integrating";
     escalated: "escalated";
-    redecomposed: "redecomposed";
 }>;
 export declare const CheckResult: z.ZodObject<{
     ok: z.ZodBoolean;
@@ -289,9 +284,9 @@ export declare const Attempt: z.ZodObject<{
     worker: z.ZodString;
     status: z.ZodEnum<{
         error: "error";
-        failed: "failed";
         running: "running";
         passed: "passed";
+        failed: "failed";
         disqualified: "disqualified";
     }>;
     startedAt: z.ZodString;
@@ -380,13 +375,9 @@ export declare const NodeState: z.ZodObject<{
         solving: "solving";
         awaiting_closer: "awaiting_closer";
         done: "done";
-        failed: "failed";
         planned: "planned";
-        verifying: "verifying";
-        selected: "selected";
         integrating: "integrating";
         escalated: "escalated";
-        redecomposed: "redecomposed";
     }>;
     base: z.ZodDefault<z.ZodNullable<z.ZodString>>;
     targetAttempts: z.ZodDefault<z.ZodNullable<z.ZodNumber>>;
@@ -400,9 +391,9 @@ export declare const NodeState: z.ZodObject<{
         worker: z.ZodString;
         status: z.ZodEnum<{
             error: "error";
-            failed: "failed";
             running: "running";
             passed: "passed";
+            failed: "failed";
             disqualified: "disqualified";
         }>;
         startedAt: z.ZodString;
@@ -498,7 +489,6 @@ export declare const Run: z.ZodObject<{
         awaiting_closer: "awaiting_closer";
         ready_to_close: "ready_to_close";
         done: "done";
-        failed: "failed";
     }>;
     requestedTier: z.ZodUnion<readonly [z.ZodEnum<{
         focused: "focused";
@@ -561,13 +551,9 @@ export declare const Run: z.ZodObject<{
             solving: "solving";
             awaiting_closer: "awaiting_closer";
             done: "done";
-            failed: "failed";
             planned: "planned";
-            verifying: "verifying";
-            selected: "selected";
             integrating: "integrating";
             escalated: "escalated";
-            redecomposed: "redecomposed";
         }>;
         base: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         targetAttempts: z.ZodDefault<z.ZodNullable<z.ZodNumber>>;
@@ -581,9 +567,9 @@ export declare const Run: z.ZodObject<{
             worker: z.ZodString;
             status: z.ZodEnum<{
                 error: "error";
-                failed: "failed";
                 running: "running";
                 passed: "passed";
+                failed: "failed";
                 disqualified: "disqualified";
             }>;
             startedAt: z.ZodString;
@@ -741,7 +727,6 @@ export declare const Run: z.ZodObject<{
             awaiting_closer: "awaiting_closer";
             ready_to_close: "ready_to_close";
             done: "done";
-            failed: "failed";
         }>;
     }, z.core.$strip>>>;
     overheadUsage: z.ZodOptional<z.ZodObject<{

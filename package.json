@@ -1,6 +1,6 @@
 {
   "name": "graftree-agent",
-  "version": "0.4.3",
+  "version": "1.0.0",
   "description": "Tree-structured, test-first, multi-model coding agent engine: decompose hard problems, solve in isolated worktrees across models, merge verified results into one best answer.",
   "license": "MIT",
   "type": "module",
@@ -24,6 +24,7 @@
     "plugins",
     "README.md",
     "DESIGN.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
@@ -50,7 +51,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oum353/graftree.git"
+    "url": "git+https://github.com/OUM353/graftree.git"
+  },
+  "homepage": "https://github.com/OUM353/graftree#readme",
+  "bugs": {
+    "url": "https://github.com/OUM353/graftree/issues"
   },
   "dependencies": {
     "yaml": "^2.9.1",

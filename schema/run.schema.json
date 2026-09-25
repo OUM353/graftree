@@ -1,5 +1,5 @@
 {
-  "$id": "https://github.com/oum353/graftree/schema/run.schema.json",
+  "$id": "https://raw.githubusercontent.com/OUM353/graftree/main/schema/run.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
@@ -29,8 +29,7 @@
         "solving",
         "awaiting_closer",
         "ready_to_close",
-        "done",
-        "failed"
+        "done"
       ]
     },
     "requestedTier": {
@@ -78,13 +77,13 @@
                 "properties": {
                   "id": {
                     "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
                   },
                   "parent": {
                     "anyOf": [
                       {
                         "type": "string",
-                        "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
                       },
                       {
                         "type": "null"
@@ -170,7 +169,7 @@
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
                     }
                   }
                 },
@@ -207,13 +206,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
           },
           "parent": {
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
               },
               {
                 "type": "null"
@@ -299,7 +298,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
             }
           },
           "status": {
@@ -307,14 +306,10 @@
             "enum": [
               "planned",
               "solving",
-              "verifying",
-              "awaiting_closer",
-              "selected",
               "integrating",
-              "done",
-              "failed",
+              "awaiting_closer",
               "escalated",
-              "redecomposed"
+              "done"
             ]
           },
           "base": {
@@ -928,13 +923,13 @@
                     "properties": {
                       "id": {
                         "type": "string",
-                        "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
                       },
                       "parent": {
                         "anyOf": [
                           {
                             "type": "string",
-                            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
                           },
                           {
                             "type": "null"
@@ -1020,7 +1015,7 @@
                         "type": "array",
                         "items": {
                           "type": "string",
-                          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
                         }
                       }
                     },
@@ -1060,8 +1055,7 @@
                 "solving",
                 "awaiting_closer",
                 "ready_to_close",
-                "done",
-                "failed"
+                "done"
               ]
             }
           },

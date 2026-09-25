@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cleanEnv } from "../exec.js";
+import { cleanEnv, killTree, track } from "../exec.js";
 import { resolveCommand } from "./resolve-command.js";
 import type { CliWorker } from "../schema.js";
 import type { WorkerResult, WorkerTask } from "./types.js";
@@ -105,7 +105,10 @@ export async function runCliWorker(name: string, w: CliWorker, task: WorkerTask)
         env,
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
+        // Own process group on POSIX, so a timeout stops the agent and everything it started.
+        detached: process.platform !== "win32",
       });
+      track(child);
       let out = "";
       let err = "";
       let timedOut = false;
@@ -113,8 +116,8 @@ export async function runCliWorker(name: string, w: CliWorker, task: WorkerTask)
       child.stderr.on("data", (d) => (err += d));
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGTERM");
-        setTimeout(() => child.kill("SIGKILL"), 5000).unref();
+        killTree(child, "SIGTERM");
+        setTimeout(() => killTree(child, "SIGKILL"), 5000).unref();
       }, (task.timeoutSec ?? w.timeoutSec) * 1000);
       child.on("error", (e) => {
         clearTimeout(timer);

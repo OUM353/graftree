@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseNdjson, renderArgv, runCliWorker } from "../src/workers/cli.js";
+import { runShell } from "../src/exec.js";
 import { runOpenAICompatibleWorker } from "../src/workers/openai-compatible.js";
 import { CliWorker, OpenAICompatibleWorker } from "../src/schema.js";
 
@@ -103,4 +106,40 @@ test("normalizeUsage understands CommandCode, Claude and OpenAI shapes", async (
   );
   assert.deepEqual(normalizeUsage({ prompt_tokens: 5, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 4 } }), { inputTokens: 5, outputTokens: 2, cacheReadTokens: 4 });
   assert.deepEqual(normalizeUsage(undefined), { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 });
+});
+
+/** Whether a process still runs. A zombie still answers signal 0, so on Linux check its state too. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  try {
+    return !/^\d+ \(.*\) Z/.test(readFileSync(`/proc/${pid}/stat`, "utf8"));
+  } catch {
+    return true;
+  }
+}
+
+// The grandchild has its own stdio, like a test runner or dev server an agent starts;
+// killing only the agent process would leave it running.
+test("a timed-out cli worker is stopped together with everything it started", { skip: process.platform === "win32" }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gt-kill-"));
+  const pidFile = join(dir, "grandchild.pid");
+  const w = CliWorker.parse({ type: "cli", command: ["sh", "-c", `sleep 30 </dev/null >/dev/null 2>&1 & echo $! > "${pidFile}"; wait`], timeoutSec: 1 });
+  const r = await runCliWorker("slow", w, { prompt: "x", cwd: dir });
+  assert.equal(r.timedOut, true);
+  const pid = Number(readFileSync(pidFile, "utf8"));
+  for (let i = 0; i < 20 && alive(pid); i++) await new Promise((res) => setTimeout(res, 100));
+  assert.equal(alive(pid), false, "the agent's own child process must not outlive the timeout");
+});
+
+test("a timed-out command whose shell already exited, but whose child holds the output open, still ends", { skip: process.platform === "win32" }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "gt-hold-"));
+  const started = Date.now();
+  const r = await runShell("sleep 30 & echo started", dir, 1);
+  assert.equal(r.timedOut, true);
+  assert.match(r.output, /started/);
+  assert.ok(Date.now() - started < 10_000, `took ${Date.now() - started} ms`);
 });

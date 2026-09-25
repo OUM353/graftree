@@ -34,9 +34,10 @@ graftree new --file $EX\PROBLEM.md          # tier: auto, the planner chooses
 Then plan it, with one of these:
 
 - **Claude Code as planner and closer (recommended; this is what the skill is
-  for).** Open Claude Code in `$HOME\kv-tree` and say: *"Use graftree to solve
-  run latest. Plan it yourself, then stop for my approval."* Don't give it
-  access to `graftree-src`, so it can't see the holdout.
+  for).** Open Claude Code in `$HOME\kv-tree` and run:
+  `/graftree:graftree Solve run latest in this repo. Plan it yourself, then stop for my approval.`
+  Calling the skill by name keeps other installed skills from taking over.
+  Don't give Claude access to `graftree-src`, so it can't see the holdout.
 - **A worker as planner:** `graftree plan --worker cc-deepseek-flash`.
 
 Review the proposed tree in `.graftree\runs\<run>\plan.md`, then:
@@ -73,5 +74,17 @@ node $EX\grade.mjs .
 If the tree scores higher, the extra cost bought accuracy. If both reach 25/25,
 the problem was too easy to separate them; the planner's decomposition is still
 worth reading.
+
+## Measured
+
+| Setup | Holdout | Worker calls | Notes |
+|---|---|---|---|
+| Reference solution | 25/25 | – | not included |
+| Untouched starter | 0/25 | – | |
+| Single agent: DeepSeek V4.1 Flash (CommandCode, one prompt) | **25/25** | 1 | its own test suite: 41 tests, including the 2 it started with |
+| graftree: Claude Code (Opus) plans, reviews and closes; DeepSeek V4.1 Flash solves | **25/25** | 6 | 3 leaves (store, protocol, cli with `dependsOn`), 2 attempts each, all passed first time; 52 acceptance tests; 2.5M tokens in (2.35M cached), 72K out |
+
+A tie: the spec is clear enough that one careful agent gets it all. The harder
+benchmarks are [minisheet](../minisheet/) and [tasklog](../tasklog/).
 
 On macOS/Linux, use `$HOME/graftree-src/examples/kvstore` and `/` paths.

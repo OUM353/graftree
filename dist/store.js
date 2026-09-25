@@ -94,15 +94,36 @@ export class Store {
             .map((e) => e.name)
             .sort();
     }
+    /**
+     * The most recently created run. Ids sort by their minute stamp; runs created
+     * in the same minute are ordered by their recorded creation time.
+     */
     async latestRunId() {
         const ids = await this.listRunIds();
         const last = ids.at(-1);
         if (!last)
             throw new GraftreeError("no runs yet; start one with `graftree new`", "no_run");
-        return last;
+        const stamp = (id) => id.slice(0, id.lastIndexOf("-"));
+        const sameMinute = ids.filter((id) => stamp(id) === stamp(last));
+        if (sameMinute.length === 1)
+            return last;
+        const created = await Promise.all(sameMinute.map(async (id) => {
+            try {
+                const raw = JSON.parse(await readFile(this.treePath(id), "utf8"));
+                return typeof raw.createdAt === "string" ? raw.createdAt : "";
+            }
+            catch {
+                return "";
+            }
+        }));
+        let best = 0;
+        for (let i = 1; i < sameMinute.length; i++) {
+            if (created[i] > created[best] || (created[i] === created[best] && sameMinute[i] > sameMinute[best]))
+                best = i;
+        }
+        return sameMinute[best];
     }
 }
 export function logEvent(run, event, detail) {
     run.history.push({ at: now(), event, ...(detail ? { detail } : {}) });
 }
-//# sourceMappingURL=store.js.map

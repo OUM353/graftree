@@ -14,7 +14,8 @@ test result you did not see.
 
 The engine is the `graftree` CLI. It keeps all state in `.graftree/` inside the
 repo and prints JSON with `--json`. **Always pass `--json`** and read the output;
-don't guess at state.
+don't guess at state. A failed command exits non-zero and prints
+`{"ok": false, "error": "…"}`; `graftree --help` lists the exit codes.
 
 ```bash
 graftree --version || npx -y graftree-agent --version   # use whichever works as $GT
@@ -37,14 +38,16 @@ test framework, and how to run tests.
 
 **First decide whether graftree is worth it.** A run costs many worker calls
 (several attempts per leaf, repairs, reviews) plus your own planning and review,
-often 5–30× the tokens of one agent solving the task directly. It pays off when
-a single agent is likely to get something subtly wrong: many interacting
-requirements, tricky edge cases, a vague spec that needs good tests, a bug
-nobody has pinned down. For a small or clearly specified task, tell the user a
-single agent is likely as accurate and far cheaper, and use graftree only if they
-still want it. (In a measured run on a clear ~60-line spec, a single agent and
-graftree both scored 25/25 on a hidden test suite; graftree used 6× the worker
-calls plus the closer's work.)
+often 5–30× the tokens of one agent solving the task directly. Measured on
+hidden test suites, a strong single agent that tests its own work was about as
+accurate: 25/25 vs 25/25 on a small spec, 38/38 vs 38/38 on a hard, precise
+one, and 50/50 alone on a vague ticket in a well-structured codebase. graftree's
+edge came from review: reading candidates against the spec caught slips the
+tests missed (2 more rules right out of 126 on the hard spec), for 6–11× the
+worker calls. So recommend it when a wrong answer costs more than that, or when
+the work is too big for one agent session. For everyday or clearly specified
+tasks, tell the user a single agent is likely as accurate and far cheaper, and
+use graftree only if they still want it.
 
 Then pick a tier:
 
@@ -136,8 +139,10 @@ The engine walks the tree bottom-up:
   locked tests untouched, edits only inside `ownedPaths`, `commands.build` if set,
   and the node's acceptance command. Every failing near-miss gets its own repair
   rounds with its failure output, even after another attempt passes
-  (`budgets.repairAll: false` stops at the first pass instead). The top passing candidates are reviewed by
-  `roles.reviewer` workers.
+  (`budgets.repairAll: false` stops at the first pass instead). When
+  `roles.reviewer` has workers, they review the top passing candidates. When it
+  is `closer` (the default), no worker reviews: the review is yours, when you
+  read the diffs before deciding. Do it adversarially.
 - **Splits:** once all its children have winners, it merges them and gates the
   merge against the split's own tests plus every descendant's tests. If glue is
   needed and `roles.integrator` has workers, they repair the merge.
