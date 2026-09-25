@@ -23,5 +23,5 @@ export function table(tasks, today) {
 
 /** The JSON shape used by `list --json`. Keep the field order stable. */
 export function toJson(t) {
-  return { id: t.id, status: t.status, created: t.created, due: t.due, tags: t.tags, title: t.title };
+  return { id: t.id, status: t.status, created: t.created, updated: t.updated, due: t.due, tags: t.tags, title: t.title };
 }

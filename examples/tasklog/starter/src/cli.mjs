@@ -1,15 +1,16 @@
 #!/usr/bin/env node
-import { add, done, list } from "./commands.mjs";
+import { add, done, list, undo } from "./commands.mjs";
 
 const USAGE = `usage: tasklog <command> [options]
 
   add <title...> [--due DATE] [--tags a,b]
   list [--status open|done|all] [--tag TAG]... [--due-before DATE] [--json]
   done <id...>
+  undo
 
 Every command takes --file PATH (default: $TASKLOG_FILE, then ./tasks.txt).`;
 
-const COMMANDS = { add, list, done };
+const COMMANDS = { add, list, done, undo };
 
 export function main(argv, out = { log: console.log, warn: console.error }) {
   const [cmd, ...rest] = argv;

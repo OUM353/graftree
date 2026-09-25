@@ -1,6 +1,6 @@
-**Ticket TL-42: edit, export and recurring tasks**
+**Ticket TL-42: edit, export, recurring tasks and show**
 
-Our team has used tasklog daily for a year. Three things keep coming up:
+Our team has used tasklog daily for two years. A few things keep coming up:
 
 1. **Editing.** Right now fixing a typo or moving a due date means adding a
    new task and marking the old one done. We need something like
@@ -18,6 +18,9 @@ Our team has used tasklog daily for a year. Three things keep coming up:
    marked done, the next one should appear on its own, due one interval after
    the previous due date. Intervals like `day`, `week` and `month`, or a step
    like `2w`, would cover us. A recurring task needs a due date.
+
+4. **Show.** `list` cuts long titles, so we'd like `tasklog show 12` to print
+   one task in full: all of its fields and the whole title.
 
 Please keep everything consistent with how tasklog already works (see the
 README and the existing code and tests). People have years of task files,

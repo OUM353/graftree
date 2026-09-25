@@ -4,15 +4,17 @@
 //   ticket  = PROBLEM.md
 //   README  = the starter's README.md
 //   code    = the starter's existing code and tests
+// Several rules cut across every command (undo journal, file lock, `updated`,
+// `last`, .tasklogrc); new commands must join them to be consistent.
 // Where the ticket leaves a real choice open (exact output wording, the CSV
 // line ending, how an empty date or a tag list is written in CSV), the tests
 // accept any reasonable answer.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CLI = fileURLToPath(new URL("../src/cli.mjs", import.meta.url));
@@ -152,6 +154,7 @@ test("edit: bad input exits 2 with a tasklog: message (README: Errors)", () => {
 
 test("edit: a failed edit changes nothing (README: Errors; code)", () => {
   const f = seeded();
+  ok(run(f, ["edit", "2", "--title", "Buy milk"]));
   const before = read(f);
   assert.notEqual(run(f, ["edit", "1", "--title", "New", "--due", "someday"]).code, 0);
   assert.notEqual(run(f, ["edit", "1", "--title", "New", "--tags", "b@d"]).code, 0);
@@ -212,13 +215,17 @@ test("export: bad filters are usage errors like in list (README: Errors)", () =>
   assert.equal(run(f, ["export", "--format", "json", "--due-before", "someday"]).code, 2);
 });
 
-test("export --format is required and must be csv or json (ticket; README: Errors)", () => {
+test("export --format must be csv or json; without it, a usage error or a sensible default (ticket; README: Errors)", () => {
   const f = seeded();
   ok(run(f, ["export", "--format", "CSV"]));
-  for (const args of [["export"], ["export", "--format", "xml"]]) {
-    const r = run(f, args);
-    assert.equal(r.code, 2, args.join(" "));
-    assert.match(r.err, /^tasklog: /);
+  const bad = run(f, ["export", "--format", "xml"]);
+  assert.equal(bad.code, 2);
+  assert.match(bad.err, /^tasklog: /);
+  const none = run(f, ["export"]);
+  if (none.code === 0) assert.ok(none.out.trim().length > 0, "a default format should still print the tasks");
+  else {
+    assert.equal(none.code, 2);
+    assert.match(none.err, /^tasklog: /);
   }
 });
 
@@ -402,4 +409,164 @@ test("existing behavior: add, list, done and their messages are unchanged (code 
   assert.equal(run(f, ["done", "1"]).out, "done: 1 Buy milk\n");
   assert.equal(run(f, ["list"]).out, "No tasks.\n");
   assert.equal(run(f, ["done", "1"]).err, "tasklog: task 1 is already done\n");
+});
+
+// --- conventions every command must join (README: Picking tasks, Settings, Safety) ---
+
+const V2_FILE = [
+  "# tasklog v2",
+  "1\topen\t2027-01-02\t2027-02-01\t2027-04-01\twork\tFrom tasklog 2.0",
+  "2\tdone\t2027-01-03\t2027-01-05\t-\t-\tAlso 2.0",
+  "",
+].join("\n");
+
+test("existing v2 files keep working, including their updated dates (ticket; README: Safety)", () => {
+  const f = tempFile(V2_FILE);
+  ok(run(f, ["edit", "2", "--title", "Also 2.0, edited"]));
+  const all = JSON.parse(run(f, ["list", "--json", "--status", "all"]).out);
+  const one = all.find((t) => t.id === 1);
+  assert.equal(one.updated, "2027-02-01");
+  assert.equal(one.title, "From tasklog 2.0");
+  assert.equal(all.find((t) => t.id === 2).title, "Also 2.0, edited");
+});
+
+test("edit sets updated to today and keeps created (README: updated is the day the task last changed)", () => {
+  const f = seeded();
+  ok(run(f, ["edit", "1", "--title", "x"]));
+  const t = JSON.parse(run(f, ["list", "--json", "--status", "all"]).out).find((x) => x.id === 1);
+  assert.equal(t.created, "2027-03-01");
+  assert.equal(t.updated, NOW);
+});
+
+test("recurring: the next task is created and updated today (README: updated)", () => {
+  const f = tempFile();
+  ok(run(f, ["add", "Review", "--due", "2027-03-12", "--every", "week"], "2027-03-01"));
+  ok(run(f, ["done", "1"]));
+  const t = JSON.parse(run(f, ["list", "--json"]).out)[0];
+  assert.deepEqual([t.id, t.created, t.updated, t.due], [2, NOW, NOW, "2027-03-19"]);
+});
+
+test("undo reverts an edit exactly (README: every change can be undone)", () => {
+  const f = seeded();
+  const before = read(f);
+  ok(run(f, ["edit", "1", "--title", "Changed", "--due", "none", "--tags", "none"]));
+  ok(run(f, ["undo"]));
+  assert.equal(read(f), before);
+});
+
+test("undo reverts a recurring done in one step: reopens it and removes the next task (README: one command is one step)", () => {
+  const f = tempFile();
+  ok(run(f, ["add", "Review", "--due", "fri", "--every", "week"]));
+  const before = read(f);
+  ok(run(f, ["done", "1"]));
+  assert.equal(tasks(f).length, 2);
+  ok(run(f, ["undo"]));
+  assert.equal(read(f), before);
+});
+
+test("undo removes a recurring task that was just added (README: undo)", () => {
+  const f = tempFile();
+  ok(run(f, ["add", "Plain"]));
+  ok(run(f, ["add", "Review", "--due", "fri", "--every", "week"]));
+  ok(run(f, ["undo"]));
+  assert.deepEqual(tasks(f).map((t) => t.title), ["Plain"]);
+});
+
+test("export and show change nothing, so undo skips past them (README: undo reverts commands that change the file)", () => {
+  const f = seeded();
+  ok(run(f, ["export", "--format", "json"]));
+  ok(run(f, ["show", "1"]));
+  ok(run(f, ["undo"]));
+  assert.deepEqual(tasks(f).map((t) => t.id), [1, 2], "the last add (task 3) was undone");
+});
+
+test("a failed edit leaves no undo step behind (README: a failed command changes nothing)", () => {
+  const f = tempFile();
+  ok(run(f, ["add", "a"]));
+  assert.notEqual(run(f, ["edit", "1", "--due", "someday"]).code, 0);
+  assert.equal(run(f, ["edit", "9", "--title", "x"]).code, 1);
+  ok(run(f, ["undo"]));
+  assert.deepEqual(tasks(f), [], "undo reverted the add, not a failed edit");
+});
+
+test("edit respects the lock: exit 3, nothing changed (README: Safety)", () => {
+  const f = seeded();
+  const before = read(f);
+  writeFileSync(`${f}.lock`, "");
+  const r = run(f, ["edit", "1", "--title", "x"]);
+  assert.equal(r.code, 3);
+  assert.match(r.err, /^tasklog: /);
+  assert.equal(read(f), before);
+});
+
+test("a recurring done respects the lock: exit 3, no next task (README: Safety)", () => {
+  const f = tempFile();
+  ok(run(f, ["add", "Review", "--due", "fri", "--every", "week"]));
+  const before = read(f);
+  writeFileSync(`${f}.lock`, "");
+  assert.equal(run(f, ["done", "1"]).code, 3);
+  assert.equal(read(f), before);
+});
+
+test("export and show only read, so they work while the file is locked (README: commands that only read never lock)", () => {
+  const f = seeded();
+  writeFileSync(`${f}.lock`, "");
+  ok(run(f, ["export", "--format", "json"]));
+  ok(run(f, ["export", "--format", "csv"]));
+  ok(run(f, ["show", "2"]));
+});
+
+test("edit releases the lock after success and after failure (README: Safety)", () => {
+  const f = seeded();
+  ok(run(f, ["edit", "1", "--title", "x"]));
+  assert.equal(existsSync(`${f}.lock`), false);
+  assert.equal(run(f, ["edit", "9", "--title", "x"]).code, 1);
+  assert.equal(existsSync(`${f}.lock`), false);
+  assert.equal(run(f, ["edit", "1", "--due", "someday"]).code, 2);
+  assert.equal(existsSync(`${f}.lock`), false);
+});
+
+test("edit and show accept last (README: Picking tasks)", () => {
+  const f = seeded();
+  ok(run(f, ["edit", "last", "--title", "Call Sam today"]));
+  assert.equal(task(f, 3).title, "Call Sam today");
+  assert.match(run(f, ["show", "last"]).out, /Call Sam today/);
+});
+
+test("edit and show take a single task: ranges and lists are usage errors (README: Picking tasks)", () => {
+  const f = seeded();
+  ok(run(f, ["edit", "2", "--title", "Buy milk"]));
+  ok(run(f, ["show", "2"]));
+  for (const sel of ["1-2", "1,2"]) {
+    assert.equal(run(f, ["edit", sel, "--title", "x"]).code, 2, `edit ${sel}`);
+    assert.equal(run(f, ["show", sel]).code, 2, `show ${sel}`);
+  }
+});
+
+test("export follows .tasklogrc's defaultStatus, like list (ticket: same filters as list; README: Settings)", () => {
+  const f = seeded();
+  ok(run(f, ["done", "3"]));
+  writeFileSync(join(dirname(f), ".tasklogrc"), JSON.stringify({ defaultStatus: "all" }));
+  const ids = JSON.parse(run(f, ["export", "--format", "json"]).out).map((t) => t.id);
+  assert.deepEqual(ids, [3, 1, 2]);
+  assert.deepEqual(ids, JSON.parse(run(f, ["list", "--json"]).out).map((t) => t.id));
+});
+
+test("show prints the whole task: full title, due date and tags (ticket)", () => {
+  const f = tempFile();
+  const long = "A very long task title that list would certainly cut off at forty characters";
+  ok(run(f, ["add", long, "--due", "2027-04-01", "--tags", "work,q2"]));
+  const out = run(f, ["show", "1"]).out;
+  assert.ok(out.includes(long), out);
+  assert.match(out, /2027-04-01/);
+  assert.match(out, /q2/);
+  assert.match(out, /work/);
+});
+
+test("show: unknown and invalid ids follow the usual exit codes (README: Errors)", () => {
+  const f = seeded();
+  const r = run(f, ["show", "9"]);
+  assert.equal(r.code, 1);
+  assert.equal(r.err, "tasklog: no task with id 9\n");
+  assert.equal(run(f, ["show", "abc"]).code, 2);
 });

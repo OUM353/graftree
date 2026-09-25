@@ -55,7 +55,7 @@ test("examples/tasklog: starter tests pass, holdout grades the untouched starter
   assert.equal(spawnSync(process.execPath, ["--test", join("test", "cli.test.mjs"), join("test", "dates.test.mjs")], { cwd: dir, env, encoding: "utf8" }).status, 0);
   const graded = spawnSync(process.execPath, ["examples/tasklog/grade.mjs", dir], { env, encoding: "utf8" });
   assert.equal(graded.status, 1);
-  assert.match(graded.stdout, /holdout: 2\/33 passed/);
+  assert.match(graded.stdout, /holdout: 1\/50 passed/);
   rmSync(join(dir, ".."), { recursive: true, force: true });
 });
 
