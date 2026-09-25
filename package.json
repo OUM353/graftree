@@ -35,6 +35,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "schema": "tsx scripts/gen-schema.ts",
+    "images": "tsx scripts/gen-images.ts",
     "check": "npm run typecheck && npm test",
     "prepublishOnly": "npm run build && npm run check"
   },

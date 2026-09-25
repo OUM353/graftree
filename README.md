@@ -1,13 +1,39 @@
-# graftree
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
+    <img src="docs/images/logo-light.svg" alt="" width="88">
+  </picture>
+</p>
 
-**Tree-structured, test-first, multi-model problem solving for hard coding tasks.**
+<h1 align="center">graftree</h1>
+
+<p align="center">
+  <b>Tree-structured, test-first, multi-model problem solving for hard coding tasks.</b>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/graftree-agent"><img alt="npm version" src="https://img.shields.io/npm/v/graftree-agent"></a>
+  <a href="https://github.com/OUM353/graftree/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/OUM353/graftree/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Node 20 or later" src="https://img.shields.io/node/v/graftree-agent">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue"></a>
+</p>
+
+<p align="center">
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#install">Install</a> ·
+  <a href="#quick-start-cli">Quick start</a> ·
+  <a href="#benchmarks">Benchmarks</a> ·
+  <a href="DESIGN.md">Design</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 graftree splits a hard problem into a tree of independent sub-tasks. It writes
 acceptance tests *before* any code, then solves each leaf several times in
 isolated git worktrees, across different models. The verified results are merged
 back up into a single best solution. It trades speed and tokens for accuracy.
 
-> **⚠ It uses a lot of tokens.** A run makes many model calls: several attempts
+> [!WARNING]
+> **It uses a lot of tokens.** A run makes many model calls: several attempts
 > per sub-task, repairs, reviews and integrations, plus the planning and review
 > done by the closer (e.g. Claude Code) itself. Expect roughly **5–30× the
 > tokens of one agent solving the task directly**. `graftree plan` prints an
@@ -20,31 +46,24 @@ back up into a single best solution. It trades speed and tokens for accuracy.
 > [Benchmarks](#benchmarks)), a strong single agent that tests its own work was
 > about as accurate as graftree, and on a third it scored full marks alone.
 > graftree's gain came from its review step: independent reading of the code
-> against the spec caught slips the tests missed, for 6–11× the worker calls. Use graftree when a wrong answer costs more
-> than that, or when the work is too big for one agent session (not yet
-> benchmarked). For everyday tasks, a single agent is the better deal.
+> against the spec caught slips the tests missed, for 6–11× the worker calls.
+> Use graftree when a wrong answer costs more than that, or when the work is too
+> big for one agent session (not yet benchmarked). For everyday tasks, a single
+> agent is the better deal.
 
 The agent that invokes it (Claude Code by default) is always the **closer**: it
 makes every final decision. Other models, such as DeepSeek via
 [CommandCode](https://www.npmjs.com/package/command-code), anything on
 OpenRouter, or local models, can do the planning, solving and review work.
 
-```
-            [problem]
-                │  triage → plan + acceptance tests
-                ▼
-        ⏸ human approves the plan         (nothing is spent before this)
-                │  tests locked by hash
-       ┌────────┼────────┐
-      [A]      [B]      [C]               each leaf: N attempts, own worktree,
-     a1 a2    b1 b2    c1 c2              mixed models
-       └─┬┘     └─┬┘     └─┬┘
-       best     best     best             gates: tests pass, locked tests untouched,
-         └────────┼────────┘              edits stay in owned paths
-             integrate + review           verified at every merge
-                  ▼
-        closer's final decision → one branch + report
-```
+## How it works
+
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/how-it-works-dark.svg">
+    <img src="docs/images/how-it-works-light.svg" alt="How graftree works. A problem becomes a plan: a tree of sub-tasks, with acceptance tests written before any code. You approve the plan, which locks the tests by hash; no attempt runs before that. Each leaf (for example src/parser/) is solved several times, by different models, each attempt in its own git worktree. An attempt passes only if the locked tests are untouched, its edits stay inside the leaf's owned paths, and the build and tests pass; the closer picks the best one. The winners merge up the tree, with tests and a review at every merge. The closer, the agent that runs graftree (Claude Code by default), makes the final call: one branch, graftree/&lt;run&gt;/final, and report.md.">
+  </picture>
+</p>
 
 ## Status
 
@@ -135,6 +154,13 @@ Each benchmark is an `examples/` folder with a starter repo, a problem statement
 and hidden holdout tests that no one in the run sees. The single agent is
 DeepSeek V4.1 Flash through CommandCode with one prompt; graftree used Claude
 Code (Opus) as the closer and the same DeepSeek as its solver.
+
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/benchmarks-dark.svg">
+    <img src="docs/images/benchmarks-light.svg" alt="Benchmark results, the same numbers as the table below. kvstore: 25/25 for both; graftree used 6 worker calls, the single agent 1. minisheet: 38/38 for both on the holdout suite; on the strict suite 86/88 for the single agent and 88/88 for graftree, which used 11 worker calls. tasklog: 50/50 for the single agent; graftree was not run.">
+  </picture>
+</p>
 
 | Benchmark | What it stresses | Single agent | graftree |
 |---|---|---|---|
@@ -255,6 +281,7 @@ npm install
 npm run check      # typecheck + tests
 npm run build      # dist/ is committed; rebuild after changing src/
 npm run schema     # regenerate schema/*.json after changing src/schema.ts
+npm run images     # redraw docs/images/*.svg after changing scripts/gen-images.ts
 ```
 
 The design and its rationale are in [DESIGN.md](DESIGN.md).

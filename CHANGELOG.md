@@ -43,6 +43,9 @@ The first stable release, after a full audit of the code, docs and examples.
   collapse of coupled splits).
 - The package no longer ships source maps that pointed at files it doesn't
   include. CI also tests Node 24.
+- The README has a logo, badges, a how-it-works diagram in place of the ASCII
+  sketch, and a benchmark chart, each in a light and a dark version
+  (`npm run images` draws them).
 
 ## 0.4.3
 - `close` crashed when the root's acceptance command listed many test files

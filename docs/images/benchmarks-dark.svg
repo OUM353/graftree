@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="372" viewBox="0 0 880 372" role="img" aria-labelledby="title desc">
+<title id="title">Benchmark results</title>
+<desc id="desc">Hidden tests passed and worker calls per run. kvstore: 25/25 for both; graftree used 6 worker calls, the single agent 1. minisheet: 38/38 for both on the holdout; on the strict suite, 86/88 for the single agent and 88/88 for graftree, which used 11 worker calls. tasklog: 50/50 for the single agent; graftree was not run.</desc>
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; font-size: 12px; fill: #9198a1; }
+.mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 11.5px; }
+.head { font-size: 14px; font-weight: 600; fill: #f0f6fc; }
+.ink { fill: #f0f6fc; }
+.bold { font-weight: 600; fill: #f0f6fc; }
+.lg { font-size: 13px; }
+.num { font-variant-numeric: tabular-nums; }
+.pill { font-size: 11px; font-weight: 600; fill: #ffffff; }
+</style>
+<rect x="0.5" y="0.5" width="879" height="371" rx="12" fill="#0d1117" stroke="#3d444d"/>
+<rect x="32" y="27" width="10" height="10" rx="2" fill="#3987e5"/>
+<text x="50" y="36.5" class="ink lg">Single agent: DeepSeek V4.1 Flash, one prompt</text>
+<rect x="424" y="27" width="10" height="10" rx="2" fill="#d95926"/>
+<text x="442" y="36.5" class="ink lg">graftree: Claude Code closer + DeepSeek solver</text>
+<text x="288" y="76" class="bold lg">Hidden tests passed</text>
+<text x="648" y="76" class="bold lg">Worker calls per run</text>
+<path d="M288.5 90V294" stroke="#3d444d"/>
+<path d="M418.5 90V294" stroke="#21262d"/>
+<path d="M548.5 90V294" stroke="#21262d"/>
+<path d="M648.5 90V294" stroke="#3d444d"/>
+<path d="M718.5 90V294" stroke="#21262d"/>
+<path d="M788.5 90V294" stroke="#21262d"/>
+<text x="32" y="122" class="bold lg">kvstore</text>
+<text x="124" y="122" class="lg">holdout · 25 tests</text>
+<path d="M288 106H544A4 4 0 0 1 548 110V112A4 4 0 0 1 544 116H288Z" fill="#3987e5"/>
+<text x="556" y="115.5" class="ink num lg">25/25</text>
+<path d="M288 120H544A4 4 0 0 1 548 124V126A4 4 0 0 1 544 130H288Z" fill="#d95926"/>
+<text x="556" y="129.5" class="ink num lg">25/25</text>
+<path d="M648 106H658A4 4 0 0 1 662 110V112A4 4 0 0 1 658 116H648Z" fill="#3987e5"/>
+<text x="670" y="115.5" class="ink num lg">1</text>
+<path d="M648 120H728A4 4 0 0 1 732 124V126A4 4 0 0 1 728 130H648Z" fill="#d95926"/>
+<text x="740" y="129.5" class="ink num lg">6</text>
+<path d="M32 145.5H848" stroke="#21262d"/>
+<text x="32" y="176" class="bold lg">minisheet</text>
+<text x="124" y="176" class="lg">holdout · 38 tests</text>
+<path d="M288 160H544A4 4 0 0 1 548 164V166A4 4 0 0 1 544 170H288Z" fill="#3987e5"/>
+<text x="556" y="169.5" class="ink num lg">38/38</text>
+<path d="M288 174H544A4 4 0 0 1 548 178V180A4 4 0 0 1 544 184H288Z" fill="#d95926"/>
+<text x="556" y="183.5" class="ink num lg">38/38</text>
+<text x="124" y="220" class="lg">strict · 88 tests</text>
+<path d="M288 204H538.0909090909091A4 4 0 0 1 542.0909090909091 208V210A4 4 0 0 1 538.0909090909091 214H288Z" fill="#3987e5"/>
+<text x="550.0909090909091" y="213.5" class="ink num lg">86/88</text>
+<path d="M288 218H544A4 4 0 0 1 548 222V224A4 4 0 0 1 544 228H288Z" fill="#d95926"/>
+<text x="556" y="227.5" class="ink num lg">88/88</text>
+<path d="M648 182H658A4 4 0 0 1 662 186V188A4 4 0 0 1 658 192H648Z" fill="#3987e5"/>
+<text x="670" y="191.5" class="ink num lg">1</text>
+<path d="M648 196H798A4 4 0 0 1 802 200V202A4 4 0 0 1 798 206H648Z" fill="#d95926"/>
+<text x="810" y="205.5" class="ink num lg">11</text>
+<path d="M32 243.5H848" stroke="#21262d"/>
+<text x="32" y="274" class="bold lg">tasklog</text>
+<text x="124" y="274" class="lg">holdout · 50 tests</text>
+<path d="M288 258H544A4 4 0 0 1 548 262V264A4 4 0 0 1 544 268H288Z" fill="#3987e5"/>
+<text x="556" y="267.5" class="ink num lg">50/50</text>
+<text x="294" y="281.5" class="lg">not run</text>
+<path d="M648 258H658A4 4 0 0 1 662 262V264A4 4 0 0 1 658 268H648Z" fill="#3987e5"/>
+<text x="670" y="267.5" class="ink num lg">1</text>
+<text x="654" y="281.5" class="lg">not run</text>
+<text x="288" y="310" class="num" text-anchor="middle">0%</text>
+<text x="418" y="310" class="num" text-anchor="middle">50%</text>
+<text x="548" y="310" class="num" text-anchor="middle">100%</text>
+<text x="648" y="310" class="num" text-anchor="middle">0</text>
+<text x="718" y="310" class="num" text-anchor="middle">5</text>
+<text x="788" y="310" class="num" text-anchor="middle">10</text>
+<text x="32" y="340">Hidden tests: holdout suites that no one in the run saw. minisheet's strict suite was written after both runs.</text>
+<text x="32" y="358">Worker calls: the agent runs graftree started (solve, repair, review). The closer's own usage is not included.</text>
+</svg>

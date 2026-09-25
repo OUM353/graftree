@@ -27,9 +27,9 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - name: schema files and committed dist/ are up to date
+      - name: schema files, README images and committed dist/ are up to date
         if: runner.os == 'Linux'
-        run: npm run schema && git diff --exit-code schema/ dist/
+        run: npm run schema && npm run images && git diff --exit-code schema/ dist/ docs/images/
       - name: installs globally from the packed tarball and runs
         if: runner.os != 'Windows'
         run: npm pack && npm i -g ./graftree-agent-*.tgz && graftree --version
