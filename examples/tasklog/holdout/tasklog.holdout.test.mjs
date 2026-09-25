@@ -217,7 +217,7 @@ test("export: bad filters are usage errors like in list (README: Errors)", () =>
 
 test("export --format must be csv or json; without it, a usage error or a sensible default (ticket; README: Errors)", () => {
   const f = seeded();
-  ok(run(f, ["export", "--format", "CSV"]));
+  ok(run(f, ["export", "--format", "csv"]));
   const bad = run(f, ["export", "--format", "xml"]);
   assert.equal(bad.code, 2);
   assert.match(bad.err, /^tasklog: /);

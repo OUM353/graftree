@@ -59,3 +59,4 @@ the paths and `$HOME\tl-tree` / `$HOME\tl-solo` as the directories.
 |---|---|---|
 | Reference solution | 50/50 | – |
 | Untouched starter | 1/50 | – |
+| Single agent: Claude Haiku 4.5 (Claude Code, one prompt, 3 min) | 46/50 | 1 |
