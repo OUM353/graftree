@@ -27,12 +27,18 @@ Contents:
   "existing repo").
 - `PROBLEM.md`: the full spec. Every holdout test checks a rule written here;
   nothing is hidden.
-- `holdout/`: 38 grading tests. **Keep them away from the planner and the
+- `holdout/`: two grading suites. **Keep them away from the planner and the
   solvers.**
+  - `minisheet.holdout.test.mjs`: the original 38 tests.
+  - `minisheet.strict.test.mjs`: 88 more, one per rule, covering what the
+    first suite skips (input edge cases, precedence chains, coercion corners,
+    display, every function's argument rules, cycles vs lazy `IF`, untouched
+    reference text, column edits at ZZ, and copy). They were written from the
+    spec alone, before looking at any graded solution.
 - `setup.mjs` / `grade.mjs`: the same as for kvstore.
 
-A reference solution (not included) passes 38/38. The untouched starter passes
-1 (the address-helper check).
+A reference solution (not included) passes 38/38 and 88/88. The untouched
+starter passes 1 and 2. `grade.mjs` prints one line per suite.
 
 ## Run it
 
@@ -65,13 +71,13 @@ rewriting, maybe copy), each worth several attempts.
 
 ## Measured so far
 
-| Setup | Holdout | Worker calls | Tokens |
-|---|---|---|---|
-| Reference solution | 38/38 | – | – |
-| Untouched starter | 1/38 | – | – |
-| Single agent: Claude Haiku 4.5 (Claude Code, one prompt) | 12/38 | 1 | not measured |
-| Single agent: DeepSeek V4.1 Flash (CommandCode, one prompt) | **38/38** | 1 | not measured |
-| graftree: Opus 5.5 as closer (plans, tests, reviews, integrates), DeepSeek V4.1 Flash solving | **38/38** | 11 | 15.4M in (14.8M cached), 0.5M out, plus the closer's own usage |
+| Setup | Holdout | Strict | Worker calls | Tokens |
+|---|---|---|---|---|
+| Reference solution | 38/38 | 88/88 | – | – |
+| Untouched starter | 1/38 | 2/88 | – | – |
+| Single agent: Claude Haiku 4.5 (Claude Code, one prompt) | 12/38 | 66/88 | 1 | not measured |
+| Single agent: DeepSeek V4.1 Flash (CommandCode, one prompt) | **38/38** | pending | 1 | not measured |
+| graftree: Opus 5.5 as closer (plans, tests, reviews, integrates), DeepSeek V4.1 Flash solving | **38/38** | pending | 11 | 15.4M in (14.8M cached), 0.5M out, plus the closer's own usage |
 
 **What the numbers say.** On the holdout, graftree tied with DeepSeek alone at
 about 11× the worker calls, plus the closer's time and about 51 minutes of
