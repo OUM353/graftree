@@ -1,0 +1,11 @@
+{
+  "name": "tasklog",
+  "version": "1.3.0",
+  "private": true,
+  "type": "module",
+  "description": "A small command-line task list kept in a plain text file.",
+  "bin": { "tasklog": "src/cli.mjs" },
+  "scripts": {
+    "test": "node --test"
+  }
+}
