@@ -132,7 +132,14 @@ export async function withRunLock<T>(store: Store, runId: string, fn: () => Prom
     if (alive && pid !== process.pid) throw new GraftreeError(`run ${runId} is already being processed by pid ${pid}`, "locked");
     await rm(lock, { force: true });
   }
-  const fh = await open(lock, "wx");
+  let fh;
+  try {
+    fh = await open(lock, "wx");
+  } catch (e) {
+    // Another process created the lock between our check and now.
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") throw new GraftreeError(`run ${runId} is already being processed by another graftree`, "locked");
+    throw e;
+  }
   await fh.write(String(process.pid));
   await fh.close();
   try {
@@ -776,12 +783,16 @@ export async function retry(store: Store, runId: string | undefined, nodeId: str
     const node = run.nodes[nodeId];
     if (!node) throw new GraftreeError(`unknown node "${nodeId}"`, "invalid");
     if (node.kind !== "leaf") throw new GraftreeError(`retry applies to leaves; for split ${nodeId}, fix the integration and use \`graftree attempt\``, "invalid");
+    if (!Number.isSafeInteger(count) || count < 1) throw new GraftreeError(`retry count must be a positive whole number, got ${count}`, "invalid");
+    const hadWinner = node.winner !== null;
     node.targetAttempts = node.attempts.length + count;
     node.status = "planned";
     node.winner = null;
     node.recommended = null;
     node.awaiting = undefined;
     await resetAncestors(store, run, nodeId);
+    // Its code may change, so anything built on the old winner starts over.
+    if (hadWinner) await resetDependents(store, run, nodeId);
     logEvent(run, "retry", `${nodeId} +${count}`);
     run.status = "solving";
     await store.saveRun(run);
@@ -922,6 +933,7 @@ export async function harden(store: Store, runId: string | undefined, nodeId: st
     }
     run.hardening.push({ at: now(), node: nodeId, files, command: input.command.trim(), reason: input.reason.trim(), baseCommit: commit });
 
+    const hadWinner = node.winner !== null;
     Object.assign(node, { winner: null, recommended: null, decidedBy: null, awaiting: undefined, status: "planned" });
     if (node.kind === "leaf") node.regate = true;
     else {
@@ -930,6 +942,8 @@ export async function harden(store: Store, runId: string | undefined, nodeId: st
       Object.assign(node, { base: null, attempts: [] });
     }
     await resetAncestors(store, run, nodeId);
+    // The bar rose and its winner may change, so anything built on the old winner starts over.
+    if (hadWinner) await resetDependents(store, run, nodeId);
     logEvent(run, "hardened", `${nodeId}: +${files.length} test file(s): ${input.reason.trim()}`);
     run.status = "solving";
     await store.saveRun(run);

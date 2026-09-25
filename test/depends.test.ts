@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { closeRun } from "../src/close.js";
 import { solverPrompt, plannerPrompt } from "../src/prompts.js";
-import { decide, runTree } from "../src/solve.js";
+import { decide, retry, runTree } from "../src/solve.js";
 import { approvedRun, dependentPlan } from "./fixtures.js";
 import { gitOut } from "./helpers.js";
 
@@ -52,5 +52,19 @@ test("dependsOn: changing a dependency's winner restarts its dependents", async 
   assert.equal(s.status, "ready_to_close");
   const after = await store.loadRun(runId);
   const win = after.nodes.parser!.attempts.find((a) => a.n === other)!.commit!;
+  assert.equal(gitOut(store.root, "merge-base", "--is-ancestor", win, after.nodes.calc!.base!), "");
+});
+
+test("dependsOn: retrying a decided dependency restarts its dependents", async () => {
+  const { store, runId } = await approvedRun(dependentPlan(), { solver: ["good"], extra: "budgets:\n  attemptsPerLeaf: 1\n  autoSelect: true" });
+  assert.equal((await runTree(store, runId)).status, "ready_to_close");
+  const run = await retry(store, runId, "parser", 1);
+  assert.deepEqual(run.nodes.calc!.attempts, [], "calc was built on parser's old winner");
+  assert.equal(run.nodes.calc!.base, null);
+  assert.ok(run.history.some((h) => h.event === "reopened" && h.detail === "calc (dependency parser changed)"));
+  assert.equal(run.nodes.eval!.status, "done");
+  assert.equal((await runTree(store, runId)).status, "ready_to_close");
+  const after = await store.loadRun(runId);
+  const win = after.nodes.parser!.attempts.find((a) => a.n === after.nodes.parser!.winner)!.commit!;
   assert.equal(gitOut(store.root, "merge-base", "--is-ancestor", win, after.nodes.calc!.base!), "");
 });

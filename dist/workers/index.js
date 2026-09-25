@@ -14,4 +14,3 @@ export function runWorker(name, w, task, mode = "agent") {
             return mode === "agent" ? runApiAgent(name, w, task) : runOpenAICompatibleWorker(name, w, task);
     }
 }
-//# sourceMappingURL=index.js.map

@@ -9,11 +9,11 @@ The skill folder is `plugins/graftree/skills/graftree/`.
 ## Claude Code
 
 ```
-/plugin marketplace add oum353/graftree
+/plugin marketplace add OUM353/graftree
 /plugin install graftree@graftree
 ```
 
-Or copy the skill folder by hand into `~/.claude/skills/graftree/` (personal) or
+Then run `/graftree:graftree <what to solve>`. Or copy the skill folder by hand into `~/.claude/skills/graftree/` (personal) or
 `.claude/skills/graftree/` (per project).
 
 ## CommandCode

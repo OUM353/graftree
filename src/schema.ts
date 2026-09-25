@@ -126,9 +126,11 @@ export type Role = keyof Config["roles"];
 // Plan (what the planner submits; the closer and the human approve it)
 // ---------------------------------------------------------------------------
 
+// Explicit ranges instead of the /i flag: JSON Schema patterns have no flags,
+// so the published schema must accept exactly what the engine accepts.
 export const NodeId = z
   .string()
-  .regex(/^[a-z0-9][a-z0-9._-]{0,63}$/i, "node ids: letters, digits, '.', '_', '-' (max 64)");
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/, "node ids: letters, digits, '.', '_', '-' (max 64)");
 
 export const Contract = z.object({
   /** Interfaces this node provides to siblings/parent (signatures, data shapes, endpoints). */
@@ -159,7 +161,10 @@ export const PlanNode = z.object({
   /** Paths several children touch; only the parent's integrator may edit them. */
   sharedPaths: z.array(z.string()).default([]),
   acceptance: Acceptance,
-  /** Sibling ids whose contracts this node consumes (ordering hint, not a hard wait). */
+  /**
+   * Sibling ids whose real code this node's tests need. The node waits until
+   * they have winners and starts from the run base merged with their code.
+   */
   dependsOn: z.array(NodeId).default([]),
 });
 export type PlanNode = z.infer<typeof PlanNode>;
@@ -198,22 +203,17 @@ export const RunStatus = z.enum([
   "solving",
   "awaiting_closer", // engine paused for a closer decision
   "ready_to_close", // root has a winner; `graftree close` runs final checks
-  "done",
-  "failed",
+  "done", // closed: final checks passed, result on graftree/<run>/final
 ]);
 export type RunStatus = z.infer<typeof RunStatus>;
 
 export const NodeStatus = z.enum([
-  "planned",
-  "solving",
-  "verifying",
-  "awaiting_closer",
-  "selected",
-  "integrating",
-  "done",
-  "failed",
-  "escalated",
-  "redecomposed",
+  "planned", // waiting for its dependencies or children
+  "solving", // leaf attempts running
+  "integrating", // split: merging and gating its children's winners
+  "awaiting_closer", // candidates to choose from, or a closer slot to fill
+  "escalated", // nothing passed; the closer retries, submits, or re-decomposes
+  "done", // winner selected
 ]);
 
 export const CheckResult = z.object({

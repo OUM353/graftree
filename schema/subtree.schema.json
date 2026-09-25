@@ -1,5 +1,5 @@
 {
-  "$id": "https://github.com/oum353/graftree/schema/subtree.schema.json",
+  "$id": "https://raw.githubusercontent.com/OUM353/graftree/main/schema/subtree.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
@@ -21,13 +21,13 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
           },
           "parent": {
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
               },
               {
                 "type": "null"
@@ -113,7 +113,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
             }
           }
         },

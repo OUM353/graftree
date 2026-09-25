@@ -97,11 +97,32 @@ export class Store {
       .sort();
   }
 
+  /**
+   * The most recently created run. Ids sort by their minute stamp; runs created
+   * in the same minute are ordered by their recorded creation time.
+   */
   async latestRunId(): Promise<string> {
     const ids = await this.listRunIds();
     const last = ids.at(-1);
     if (!last) throw new GraftreeError("no runs yet; start one with `graftree new`", "no_run");
-    return last;
+    const stamp = (id: string) => id.slice(0, id.lastIndexOf("-"));
+    const sameMinute = ids.filter((id) => stamp(id) === stamp(last));
+    if (sameMinute.length === 1) return last;
+    const created = await Promise.all(
+      sameMinute.map(async (id) => {
+        try {
+          const raw = JSON.parse(await readFile(this.treePath(id), "utf8")) as { createdAt?: unknown };
+          return typeof raw.createdAt === "string" ? raw.createdAt : "";
+        } catch {
+          return "";
+        }
+      }),
+    );
+    let best = 0;
+    for (let i = 1; i < sameMinute.length; i++) {
+      if (created[i]! > created[best]! || (created[i] === created[best] && sameMinute[i]! > sameMinute[best]!)) best = i;
+    }
+    return sameMinute[best]!;
   }
 }
 

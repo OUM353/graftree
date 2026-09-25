@@ -19,6 +19,10 @@ export declare class Store {
     saveRun(run: Run): Promise<void>;
     loadRun(idOrLatest?: string): Promise<Run>;
     listRunIds(): Promise<string[]>;
+    /**
+     * The most recently created run. Ids sort by their minute stamp; runs created
+     * in the same minute are ordered by their recorded creation time.
+     */
     latestRunId(): Promise<string>;
 }
 export declare function logEvent(run: Run, event: string, detail?: string): void;

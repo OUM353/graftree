@@ -28,4 +28,3 @@ export function matchesPath(pattern, path) {
     return globToRegExp(p).test(path);
 }
 export const matchesAny = (patterns, path) => patterns.some((g) => matchesPath(g, path));
-//# sourceMappingURL=glob.js.map

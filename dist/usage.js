@@ -88,4 +88,3 @@ export function usageWarnings(run, budgets) {
 export function recordedWarnings(run) {
     return run.history.filter((h) => h.event === "usage-warning" && h.detail).map((h) => h.detail.replace(/^[^ ]+ /, ""));
 }
-//# sourceMappingURL=usage.js.map

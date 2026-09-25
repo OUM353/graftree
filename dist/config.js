@@ -44,4 +44,3 @@ export function getWorker(cfg, name) {
 export function formatIssues(issues) {
     return issues.map((i) => `  - ${i.path.map(String).join(".") || "(root)"}: ${i.message}`).join("\n");
 }
-//# sourceMappingURL=config.js.map

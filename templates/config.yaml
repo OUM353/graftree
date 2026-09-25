@@ -1,4 +1,4 @@
-# graftree configuration — https://github.com/oum353/graftree
+# graftree configuration — https://github.com/OUM353/graftree
 # Schema: `graftree schema config`
 version: 1
 
@@ -40,9 +40,12 @@ workers:
   #   model: qwen3-coder
 
 # Roles -> workers. "closer" means the root agent driving graftree does it
-# itself. The closer ALWAYS makes the final decisions (selection, merge
-# sign-off). That is not configurable. Several workers in a list are used
-# round-robin across attempts; mixing models improves accuracy.
+# itself. The closer always makes the final decisions (selection, merge
+# sign-off); only budgets.autoSelect (for headless runs) hands selection to the
+# engine. Several workers in a list are used round-robin across attempts;
+# mixing models improves accuracy. The engine reads solver, integrator and
+# reviewer; planner and test_writer tell the closer who plans (a worker plans
+# only via `graftree plan --worker NAME`).
 roles:
   planner: [closer]
   test_writer: [closer]

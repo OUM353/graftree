@@ -22,9 +22,16 @@ export interface WorkEstimate {
     attemptsPerLeaf: number;
     /** Attempts run by engine workers (the rest are the closer's own). */
     solverRuns: number;
-    /** Worker calls if every attempt passes first time: solves + integrations + one review per node. */
+    /**
+     * Worker calls if every attempt passes first time: the solver runs plus one
+     * review per node. A split's first attempt is a plain git merge (no call).
+     */
     minCalls: number;
-    /** Worker calls if every failing attempt uses its whole repair budget and every candidate gets reviewed. */
+    /**
+     * Worker calls if every failing attempt uses its whole repair budget (splits
+     * included, when integrators are workers) and every candidate gets reviewed.
+     * Hardening and re-decomposition add budget on top.
+     */
     maxCalls: number;
     /** True when the closer (the root agent) also plans, solves, integrates or reviews; that usage is not metered. */
     closerWorks: boolean;

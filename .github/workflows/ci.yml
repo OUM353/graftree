@@ -9,12 +9,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        node: [20, 22]
+        node: [20, 22, 24]
         include:
           - os: windows-latest
-            node: 22
+            node: 24
           - os: macos-latest
-            node: 22
+            node: 24
     steps:
       - if: runner.os == 'Windows'
         run: git config --global core.autocrlf false

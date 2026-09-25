@@ -10,13 +10,14 @@ graftree repo.
 | `tier` | `focused` \| `standard` \| `deep`. Sets the max depth and attempts per leaf |
 | `summary` | One paragraph describing the overall approach |
 | `rationale` | Why this split, or why no split. The human reads this at approval |
-| `nodes[].id` | Short slug: letters, digits, `.`, `_`, `-` |
+| `nodes[].id` | Short slug: letters, digits, `.`, `_`, `-` (starts with a letter or digit, at most 64 characters) |
+| `nodes[].parent` | The parent split's id, or `null` for the root |
 | `nodes[].kind` | `split` (has 2 or more children) or `leaf` (solved directly) |
 | `nodes[].goal` | What "done" means for this node, in plain words |
 | `nodes[].contract.exposes` | Exact interfaces this node provides |
 | `nodes[].contract.consumes` | Exact interfaces it uses from siblings. It codes against these |
 | `nodes[].ownedPaths` | Globs it may modify. Disjoint from siblings, inside the parent's |
-| `nodes[].sharedPaths` | For split nodes only: files the children need, edited only during integration |
+| `nodes[].sharedPaths` | For split nodes only: files several children need, edited only during integration |
 | `nodes[].acceptance.files` | Repo-relative test files, drafted under the run's `tests/` dir |
 | `nodes[].acceptance.command` | Runs from the repo root. Exits 0 only when this node is done |
 | `nodes[].acceptance.rubric` | Only for goals that tests can't express |

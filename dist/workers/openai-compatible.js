@@ -49,4 +49,3 @@ export async function runOpenAICompatibleWorker(name, w, task, fetchImpl = fetch
         clearTimeout(timer);
     }
 }
-//# sourceMappingURL=openai-compatible.js.map

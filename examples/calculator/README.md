@@ -12,10 +12,15 @@ meet only at the AST shape, merged at a **root** split. It runs the whole loop
 ## Run it (Windows `cmd.exe`)
 
 Use any git repo that has at least one commit. It doesn't need a
-`package.json`; the tests only need Node.
+`package.json`; the tests only need Node. `graftree init` writes
+`.graftree\config.yaml` with DeepSeek V4.1 Flash through CommandCode as solver
+and reviewer (install `command-code` and run `commandcode login` first; check it
+with `graftree worker test cc-deepseek-flash`). Without a config, every role
+falls back to the closer, and `run` would wait for you to submit each attempt.
 
 ```bat
 cd /d %USERPROFILE%\graftree-test
+graftree init
 graftree new "Build a tiny calculator: parse 'a op b' and evaluate it" --tier standard
 graftree plan --file %USERPROFILE%\graftree-src\examples\calculator\plan.json --tests %USERPROFILE%\graftree-src\examples\calculator\tests
 graftree show
@@ -46,7 +51,7 @@ reviews per leaf and 1 at the root. Each CommandCode call starts at about 18K
 input tokens. To make the first run cheaper, set `attemptsPerLeaf: 2` under
 `budgets:` in `.graftree\config.yaml` before `graftree run`.
 
-## Try hardening (v0.3)
+## Try hardening
 
 In the first live run, the reviewer found that `parse("9".repeat(400) + "+1")`
 returns `a: Infinity` instead of rejecting the input. The winning parser has that

@@ -16,13 +16,13 @@ back up into a single best solution. It trades speed and tokens for accuracy.
 > closer's own usage is not included in those numbers; check it in your agent
 > (for Claude Code, `/cost`).
 >
-> **Use it where a single agent tends to get things subtly wrong:** many
-> interacting requirements, tricky edge cases, a vague spec, an unexplained bug.
-> On a small, clearly specified task a single agent is usually just as accurate.
-> In our [kvstore example](examples/kvstore/) both scored 25/25 on a hidden
-> test suite, and graftree cost 6× the worker calls.
-> [examples/minisheet](examples/minisheet/) is a harder benchmark built to
-> separate the two.
+> **What we measured.** On two benchmarks graded by hidden tests (see
+> [Benchmarks](#benchmarks)), a strong single agent that tests its own work was
+> about as accurate as graftree, and on a third it scored full marks alone.
+> graftree's gain came from its review step: independent reading of the code
+> against the spec caught slips the tests missed, for 6–11× the worker calls. Use graftree when a wrong answer costs more
+> than that, or when the work is too big for one agent session (not yet
+> benchmarked). For everyday tasks, a single agent is the better deal.
 
 The agent that invokes it (Claude Code by default) is always the **closer**: it
 makes every final decision. Other models, such as DeepSeek via
@@ -48,11 +48,12 @@ OpenRouter, or local models, can do the planning, solving and review work.
 
 ## Status
 
-**v0.4: the full loop runs, live.** Plan → approval → solve → verify → repair →
-review → harden → integrate → close. It is covered by end-to-end tests with a
-scripted fake agent, and has been run end to end on Windows with DeepSeek V4.1
-Flash through CommandCode. OpenRouter tool calling still needs a live test. See
-[Verification status](#verification-status).
+**v1.0.** The full loop works: plan → approval → solve → verify → repair →
+review → harden → re-decompose → integrate → close. It is covered by end-to-end
+tests with a scripted fake agent, and has run live on Windows with Claude Code
+(Opus) as the closer and DeepSeek V4.1 Flash, through CommandCode, as the solver.
+OpenRouter tool calling still needs a live test. See
+[Verification status](#verification-status) and the [changelog](CHANGELOG.md).
 
 ## Install
 
@@ -61,28 +62,28 @@ Pick whichever parts you need. Each one works on its own.
 ### The skill (Claude Code)
 
 ```
-/plugin marketplace add oum353/graftree
+/plugin marketplace add OUM353/graftree
 /plugin install graftree@graftree
 ```
 
-Then ask Claude to "use graftree to …", or run `/graftree`. For other agents
-(CommandCode, OpenCode, Codex, …) see [integrations/AGENTS.md](integrations/AGENTS.md).
-The skill is a plain folder: [`plugins/graftree/skills/graftree/`](plugins/graftree/skills/graftree/).
+Then run `/graftree:graftree <what to solve>`, or ask Claude to "use graftree
+to …". For other agents (CommandCode, OpenCode, Codex, …) see
+[integrations/AGENTS.md](integrations/AGENTS.md). The skill is a plain folder:
+[`plugins/graftree/skills/graftree/`](plugins/graftree/skills/graftree/).
 
 ### The CLI
 
 ```bash
-# From GitHub (dist/ is prebuilt, no build step):
-npm i -g https://codeload.github.com/oum353/graftree/tar.gz/refs/heads/main
-
-# After the npm release:
 npm i -g graftree-agent
-npx -y graftree-agent --help          # no install
+npx -y graftree-agent --help          # or run it without installing
+
+# The latest main branch (dist/ is prebuilt, no build step):
+npm i -g https://codeload.github.com/OUM353/graftree/tar.gz/refs/heads/main
 ```
 
-This needs Node ≥ 20 and git. It works on Linux, macOS and Windows; CI runs on all three.
-Until the npm release, install from `main` as shown.
-(`npm i -g github:…` git installs are unreliable: npm can drop files while extracting them.)
+This needs Node ≥ 20 and git. It works on Linux, macOS and Windows; CI runs on
+all three. (`npm i -g github:…` git installs are unreliable: npm can drop files
+while extracting them. Use the tarball URL above.)
 
 ### The library
 
@@ -119,32 +120,55 @@ When a leaf is too big to solve whole, `redecompose NODE --file subtree.json --t
 splits it into a subtree (new tests added, old tests kept). It pauses for `approve`/`reject` like the first plan.
 Other commands: `retry NODE` (more attempts),
 `attempt NODE --worktree P` (submit your own candidate through the same gates),
-`clean` (remove worktrees).
+`list`, `lock-check`, `worker test NAME`, `schema`, and `clean` (remove worktrees).
+`graftree --help` lists everything.
 
-Add `--json` to any command for machine-readable output.
+Add `--json` to any command for machine-readable output; errors then print
+`{"ok": false, "error": "…", "code": "…"}`. Exit codes: `0` ok, `1` error,
+`2` not accepted (a plan or subtree failed validation, or `harden` without
+`--yes`), `3` `lock-check` found changed locked tests, `4` an `attempt` did not
+pass its gates, `5` `close`: the final checks failed.
+
+## Benchmarks
+
+Each benchmark is an `examples/` folder with a starter repo, a problem statement
+and hidden holdout tests that no one in the run sees. The single agent is
+DeepSeek V4.1 Flash through CommandCode with one prompt; graftree used Claude
+Code (Opus) as the closer and the same DeepSeek as its solver.
+
+| Benchmark | What it stresses | Single agent | graftree |
+|---|---|---|---|
+| [kvstore](examples/kvstore) | Small spec: expiry, nested transactions, a protocol, a CLI | 25/25 | 25/25, 6 worker calls |
+| [minisheet](examples/minisheet) | Precise, hard spec: a spreadsheet engine with many interacting rules | 38/38 · strict 86/88 | 38/38 · strict **88/88**, 11 worker calls |
+| [tasklog](examples/tasklog) | Vague ticket; the rules live in an existing codebase's conventions | 50/50 | not run |
+
+On minisheet the closer's review found three spec violations that the original
+38 tests don't check. A stricter suite, written afterwards, showed the single
+agent missed two of the rules it covers. Details, costs and caveats are in each
+example's README.
 
 ## Examples
 
 - [`examples/calculator`](examples/calculator): a ready-made two-leaf plan. It is the
   cheapest way to see the whole loop, including hardening.
 - [`examples/kvstore`](examples/kvstore): a feature request on an existing
-  codebase with no plan given, so the planner has to decompose it. A holdout
-  suite that the run never sees grades the result, and you can run the same
-  problem through a single agent for comparison. Both scored 25/25, so it
-  is a good first run but too easy to separate them.
-- [`examples/minisheet`](examples/minisheet): the hard benchmark. A small
+  codebase with no plan given, so the planner has to decompose it, graded by a
+  25-test holdout. A good first live run.
+- [`examples/minisheet`](examples/minisheet): the hard, precise spec. A small
   spreadsheet engine with formulas, coercion, 15-digit numbers, cycles, long
   dependency chains, and row/column edits that rewrite references, graded by a
-  38-test holdout.
+  38-test holdout plus an 88-test strict suite.
 - [`examples/tasklog`](examples/tasklog): a vague feature ticket on an existing
-  CLI. Most rules come from the tool's existing conventions (dates, tags,
-  errors, filters, file format), not from the ticket.
+  CLI. Most rules come from the tool's existing conventions (undo journal, file
+  lock, dates, tags, errors, file formats), not from the ticket. 50 tests.
 
 ## Configure workers
 
-`.graftree/config.yaml` (created by `graftree init`):
+`.graftree/config.yaml` (created by `graftree init`; `graftree schema config`
+prints its full schema):
 
 ```yaml
+version: 1
 workers:
   cc-deepseek-flash:                 # CommandCode + DeepSeek V4.1 Flash, headless
     type: cli
@@ -187,7 +211,9 @@ verdict. The closer decides which one wins.
 Reviews look for what the tests missed. Each reviewer also gets the findings raised
 on sibling attempts and must confirm or rule out each one for its own candidate.
 A finding that proves real can become a hardening test (see above). A repair
-invalidates the old review, so repaired code is reviewed again.
+invalidates the old review, so repaired code is reviewed again. When
+`roles.reviewer` is `closer` (the default), the review is the closer's own
+reading of the diffs before it decides.
 
 Every worker call is metered: tokens in and out per attempt, totals in `run`/`show`
 output, and a cost section in `report.md`. Warnings fire when usage gets high:
@@ -200,9 +226,11 @@ a run on their own; the skill tells the closer to pause and ask you.
 
 | Part | How it's verified |
 |---|---|
-| Engine, gates, repair, integration, close | Automated end-to-end tests using a scripted fake CLI agent |
+| Engine, gates, repair, integration, hardening, re-decomposition, close | Automated end-to-end tests using a scripted fake CLI agent |
+| CLI | Tests that run the real CLI process (errors, exit codes, JSON output) |
 | API worker tool loop | Tests against a mocked OpenAI-compatible server |
-| CommandCode worker | Live: two full runs on Windows with DeepSeek V4.1 Flash (solve, review, hardening + repair, integrate, close). Output parsing is also tested against a captured run |
+| CommandCode worker | Live on Windows with DeepSeek V4.1 Flash: the calculator (solve, review, hardening + repair, integrate, close), kvstore and minisheet runs. Output parsing is also tested against a captured run |
+| Claude Code as the closer | Live: planned, reviewed, decided and closed the kvstore and minisheet runs through the skill |
 | OpenRouter | The request format is standard, but **no live call has been made yet** |
 
 ## Safety
@@ -211,6 +239,8 @@ a run on their own; the skill tells the closer to pause and ask you.
   permission prompts bypassed. graftree only ever points them at throwaway git
   worktrees and never pushes. Still, run it on machines and repos where that is
   acceptable, or inside a container.
+- Workers and test commands run in their own process groups. A timeout, or
+  Ctrl-C on graftree, stops them together with everything they started.
 - API keys are read only from environment variables.
 - Approval never modifies your working tree, index, or current branch. The base
   commit lives under `refs/graftree/<run>/base`. Results land on their own branches.
@@ -223,9 +253,11 @@ a run on their own; the skill tells the closer to pause and ask you.
 ```bash
 npm install
 npm run check      # typecheck + tests
-npm run build
+npm run build      # dist/ is committed; rebuild after changing src/
 npm run schema     # regenerate schema/*.json after changing src/schema.ts
 ```
+
+The design and its rationale are in [DESIGN.md](DESIGN.md).
 
 ## License
 

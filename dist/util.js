@@ -69,4 +69,3 @@ export function globsMayOverlap(a, b) {
     const bb = globBase(b);
     return isPathPrefix(ba, bb) || isPathPrefix(bb, ba);
 }
-//# sourceMappingURL=util.js.map
