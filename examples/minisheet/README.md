@@ -76,8 +76,8 @@ rewriting, maybe copy), each worth several attempts.
 | Reference solution | 38/38 | 88/88 | – | – |
 | Untouched starter | 1/38 | 2/88 | – | – |
 | Single agent: Claude Haiku 4.5 (Claude Code, one prompt) | 12/38 | 66/88 | 1 | not measured |
-| Single agent: DeepSeek V4.1 Flash (CommandCode, one prompt) | **38/38** | pending | 1 | not measured |
-| graftree: Opus 5.5 as closer (plans, tests, reviews, integrates), DeepSeek V4.1 Flash solving | **38/38** | pending | 11 | 15.4M in (14.8M cached), 0.5M out, plus the closer's own usage |
+| Single agent: DeepSeek V4.1 Flash (CommandCode, one prompt) | **38/38** | 86/88 | 1 | not measured |
+| graftree: Opus 5.5 as closer (plans, tests, reviews, integrates), DeepSeek V4.1 Flash solving | **38/38** | **88/88** | 11 | 15.4M in (14.8M cached), 0.5M out, plus the closer's own usage |
 
 **What the numbers say.** On the holdout, graftree tied with DeepSeek alone at
 about 11× the worker calls, plus the closer's time and about 51 minutes of
@@ -99,6 +99,22 @@ It picked the attempts without these slips, and fixed one other bug by hand:
 `ROUND` returned `Infinity` instead of `#NUM!`. The DeepSeek-only result has not
 been checked for such slips. A holdout that covers them would show whether
 the review step buys correctness that plain test counts don't see.
+
+**The strict suite.** To check, the 88-test strict suite was written from the
+spec, one test per rule the first suite skips, and both results were graded
+again. graftree scored 88/88; DeepSeek alone 86/88. DeepSeek's two misses:
+
+- `=SUM (1)` treated as a function call, though §3 says the name must be
+  *immediately* followed by `(`. DeepSeek listed this as an ambiguity it had
+  resolved the other way, so it was a judgment call, not an oversight.
+- Unmoved references re-uppercased by row/column edits (§8): the same slip the
+  graftree closer found in one of its candidates and rejected.
+
+So the review step bought something real, but small: 2 rules out of 126, at
+about 11× the worker calls plus the closer's work. Caveat: the strict suite was
+written after the closer's findings were known, so one of the two misses is a
+rule we already knew to test for; it was checked the same way for both
+results, and DeepSeek passed the other two rules the closer had flagged.
 
 The graftree run also exposed a bug in graftree itself: `close` crashed when the
 root's acceptance command listed many test files (the log file name was too
