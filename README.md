@@ -136,6 +136,9 @@ Add `--json` to any command for machine-readable output.
   spreadsheet engine with formulas, coercion, 15-digit numbers, cycles, long
   dependency chains, and row/column edits that rewrite references, graded by a
   38-test holdout.
+- [`examples/tasklog`](examples/tasklog): a vague feature ticket on an existing
+  CLI. Most rules come from the tool's existing conventions (dates, tags,
+  errors, filters, file format), not from the ticket.
 
 ## Configure workers
 
