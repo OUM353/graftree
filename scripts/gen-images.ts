@@ -90,18 +90,21 @@ const ICONS = {
 };
 
 /** The logo: a problem splits into attempts by different models, which merge into one verified result. */
-function logo(t: Theme): string {
+function logoMark(t: Theme): string[] {
   const edge = (d: string) => `<path d="${d}" ${lines(t.line, 2.5)}/>`;
   const [a, b, c] = t.models;
-  return svg(t, 64, 64, "graftree", "A problem splits into attempts by three models that merge into one verified result.", [
+  return [
     edge("M32 7V31M32 7C32 19 12 18 12 31M32 7C32 19 52 18 52 31"),
     edge("M32 31V54M12 31C12 44 32 42 32 54M52 31C52 44 32 42 32 54"),
     `<circle cx="32" cy="7" r="4.75" fill="${t.page}" stroke="${t.text}" stroke-width="2.5"/>`,
     ...[[12, a], [32, b], [52, c]].map(([x, col]) => `<circle cx="${x}" cy="31" r="6.5" fill="${col}" stroke="${t.page}" stroke-width="2.5"/>`),
     `<circle cx="32" cy="54" r="7.5" fill="${t.ok.solid}" stroke="${t.page}" stroke-width="2.5"/>`,
     `<path d="M28.75 54.25L31.1 56.6L35.5 51.75" ${lines("#ffffff", 2)}/>`,
-  ]);
+  ];
 }
+
+const logo = (t: Theme) =>
+  svg(t, 64, 64, "graftree", "A problem splits into attempts by three models that merge into one verified result.", logoMark(t));
 
 type Status = "passed" | "failed" | "repaired";
 interface Leaf { name: string; path: string; attempts: [Status, Status, Status]; best: number }
@@ -252,9 +255,78 @@ function benchmarks(t: Theme): string {
     ]);
 }
 
+/**
+ * The repository's social preview (GitHub: Settings → General → Social preview), the picture on repo
+ * cards and link previews. GitHub wants a 1280×640 PNG, and cards crop it to a wider strip, so
+ * everything stays inside the middle band. docs/images/social-preview.png is this, rendered with the
+ * Inter and JetBrains Mono fonts.
+ */
+function social(t: Theme): string {
+  const W = 1280, H = 640, cardW = 152, cardH = 136, gap = 14, cardsX = 710, cardsY = 222;
+  const cx = cardsX + (3 * cardW + 2 * gap) / 2, topY = 136, endY = 442;
+  const leaves: [string, Status[], number][] = [["A", ["passed", "failed", "passed"], 2], ["B", ["passed", "passed", "failed"], 0], ["C", ["failed", "passed", "passed"], 1]];
+  const edge = (d: string) => `<path d="${d}" ${lines(t.line, 2.5)}/>`;
+  const cards = leaves.map(([name, attempts, best], k) => {
+    const x = cardsX + k * (cardW + gap), mid = x + cardW / 2;
+    const rows = attempts.map((status, i) => {
+      const y = cardsY + 44 + i * 30;
+      return (i === best ? `<rect x="${x + 8.5}" y="${y + 0.5}" width="${cardW - 17}" height="26" rx="7" fill="${t.ok.bg}" stroke="${t.ok.border}"/>`
+        + `<rect x="${x + cardW - 62}" y="${y + 4}" width="50" height="19" rx="9.5" fill="${t.ok.solid}"/>` + text(x + cardW - 37, y + 18, "best", "pill", "middle") : "")
+        + dot(x + 23, y + 13.5, 6, t.models[i]!)
+        + text(x + 36, y + 19, `${name.toLowerCase()}${i + 1}`, "mono ink")
+        + (status === "failed" ? ICONS.cross : ICONS.check)(x + 64, y + 5, status === "failed" ? t.bad : t.ok.fg, 1.05);
+    });
+    return edge(`M${cx} ${topY + 18}C${cx} ${topY + 60} ${mid} ${cardsY - 44} ${mid} ${cardsY - 2}`)
+      + edge(`M${mid} ${cardsY + cardH + 2}C${mid} ${cardsY + cardH + 40} ${cx} ${endY - 60} ${cx} ${endY - 24}`)
+      + `<rect x="${x + 0.5}" y="${cardsY + 0.5}" width="${cardW - 1}" height="${cardH - 1}" rx="12" fill="${t.surface}" stroke="${t.border}"/>`
+      + text(x + 16, cardsY + 29, `Leaf ${name}`, "leaf") + `<path d="M${x + 1} ${cardsY + 40.5}H${x + cardW - 1}" stroke="${t.border}"/>` + rows.join("");
+  });
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="title desc">`,
+    "<title id=\"title\">graftree</title>",
+    "<desc id=\"desc\">graftree: tree-structured, test-first, multi-model problem solving for hard coding tasks. Every sub-task is solved several times by different models, and only verified code merges into one branch.</desc>",
+    "<style>",
+    `text { font-family: Inter, ${SANS}; fill: #c9d1d9; }`,
+    `.mono { font-family: "JetBrains Mono", ${MONO}; font-size: 17px; }`,
+    `.ink { fill: ${t.text}; }`,
+    `.name { font-size: 92px; font-weight: 700; letter-spacing: -2px; fill: ${t.text}; }`,
+    ".tag { font-size: 32px; font-weight: 500; }",
+    `.leaf { font-size: 17px; font-weight: 600; fill: ${t.text}; }`,
+    `.label { font-size: 19px; fill: ${t.muted}; }`,
+    ".chip { font-size: 20px; }",
+    ".pill { font-size: 13px; font-weight: 700; fill: #ffffff; }",
+    "</style>",
+    "<defs>",
+    `<radialGradient id="glow-blue" cx="0.1" cy="0.05" r="0.75"><stop offset="0" stop-color="#1f6feb" stop-opacity="0.2"/><stop offset="1" stop-color="#1f6feb" stop-opacity="0"/></radialGradient>`,
+    `<radialGradient id="glow-green" cx="0.75" cy="0.75" r="0.5"><stop offset="0" stop-color="#238636" stop-opacity="0.25"/><stop offset="1" stop-color="#238636" stop-opacity="0"/></radialGradient>`,
+    `<pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="12" cy="12" r="1.1" fill="#ffffff" fill-opacity="0.06"/></pattern>`,
+    "</defs>",
+    `<rect width="${W}" height="${H}" fill="${t.page}"/>`,
+    `<rect width="${W}" height="${H}" fill="url(#dots)"/>`,
+    `<rect width="${W}" height="${H}" fill="url(#glow-blue)"/>`,
+    `<rect width="${W}" height="${H}" fill="url(#glow-green)"/>`,
+    `<g transform="translate(92 164) scale(1.5)">${logoMark(t).join("")}</g>`,
+    text(206, 246, "graftree", "name"),
+    ...["Tree-structured, test-first,", "multi-model problem solving", "for hard coding tasks."].map((s, i) => text(96, 318 + i * 42, s, "tag")),
+    `<rect x="96.5" y="436.5" width="311" height="47" rx="23.5" fill="${t.surface}" stroke="${t.border}"/>`,
+    text(120, 467, "npm i -g graftree-agent", "mono ink chip"),
+    `<rect x="423.5" y="436.5" width="219" height="47" rx="23.5" fill="${t.surface}" stroke="${t.border}"/>`,
+    text(533, 467, "Claude Code skill", "ink chip", "middle"),
+    ...cards,
+    `<circle cx="${cx}" cy="${topY}" r="15" fill="${t.page}" stroke="${t.text}" stroke-width="4"/>`,
+    text(cx + 30, topY + 7, "plan + tests", "label"),
+    `<circle cx="${cx}" cy="${endY}" r="24" fill="${t.ok.solid}" stroke="${t.page}" stroke-width="4"/>`,
+    ICONS.check(cx - 13, endY - 13, "#ffffff", 1.625),
+    text(cx, endY + 58, "one verified branch", "label", "middle"),
+    "</svg>",
+    "",
+  ].join("\n");
+}
+
 mkdirSync("docs/images", { recursive: true });
 for (const [mode, t] of Object.entries(THEMES)) {
   writeFileSync(`docs/images/logo-${mode}.svg`, logo(t));
   writeFileSync(`docs/images/how-it-works-${mode}.svg`, flow(t));
   writeFileSync(`docs/images/benchmarks-${mode}.svg`, benchmarks(t));
 }
+writeFileSync("docs/images/social-preview.svg", social(THEMES.dark));
