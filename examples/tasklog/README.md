@@ -60,3 +60,11 @@ the paths and `$HOME\tl-tree` / `$HOME\tl-solo` as the directories.
 | Reference solution | 50/50 | – |
 | Untouched starter | 1/50 | – |
 | Single agent: Claude Haiku 4.5 (Claude Code, one prompt, 3 min) | 46/50 | 1 |
+| Single agent: DeepSeek V4.1 Flash (CommandCode, one prompt) | **50/50** | 1 |
+
+DeepSeek alone got every rule, the cross-cutting ones included. The starter
+shows one clear pattern for commands that change the file (validate, lock,
+record for undo, save), and a strong agent copies it into each new command.
+Implied conventions in a well-structured codebase are not enough to separate a
+strong single agent from graftree. What is left to test is work too large or
+too tangled for one session.
